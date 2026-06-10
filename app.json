@@ -3,6 +3,7 @@
     "name": "GrindMind",
     "slug": "GrindMind",
     "version": "1.0.0",
+    "scheme": "grindmind",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -25,6 +26,13 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-font",
+      "expo-web-browser"
+    ]
   }
 }
