@@ -183,3 +183,35 @@ export const setupDatabase = () => {
     );
   `);
 };
+
+export const clearDatabase = () => {
+  const tables = [
+    'users',
+    'routines',
+    'routine_weeks',
+    'tasks',
+    'subtasks',
+    'habits',
+    'task_completions',
+    'recovery_tasks',
+    'weekly_reports',
+    'notifications',
+    'achievements',
+    'analytics_events',
+    'routine_versions',
+    'sync_queue',
+    'sync_state'
+  ];
+
+  db.withTransactionSync(() => {
+    db.execSync('PRAGMA foreign_keys = OFF;');
+    for (const table of tables) {
+      try {
+        db.execSync(`DELETE FROM ${table};`);
+      } catch (e) {
+        console.error(`Failed to clear table ${table}:`, e);
+      }
+    }
+    db.execSync('PRAGMA foreign_keys = ON;');
+  });
+};

@@ -6,7 +6,7 @@ import { useAuthStore } from '../src/stores/useAuthStore';
 import { COLORS } from '../src/constants/theme';
 
 import { db } from '../src/db/db';
-
+import { clearDatabase } from '../src/db/schema';
 export default function AuthGuard() {
   const { isInitialized, session, setSession, setInitialized } = useAuthStore();
 
@@ -22,7 +22,10 @@ export default function AuthGuard() {
 
     checkAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        clearDatabase();
+      }
       setSession(session);
     });
 

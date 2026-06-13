@@ -66,8 +66,30 @@ export default function OnboardingScreen() {
         throw new Error('Failed to save profile to the cloud: ' + error.message);
       }
 
-      // Then pull to local db
-      await pullSync();
+      // Write profile directly to local DB for instant access
+      const userRecord = updateData && updateData[0];
+      if (userRecord) {
+        db.runSync(
+          `INSERT OR REPLACE INTO users (id, name, age, primary_goal, secondary_goal, available_daily_minutes, wake_time, sleep_time, accountability_mode, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            userRecord.id,
+            userRecord.name,
+            userRecord.age || null,
+            userRecord.primary_goal,
+            userRecord.secondary_goal || null,
+            userRecord.available_daily_minutes,
+            userRecord.wake_time,
+            userRecord.sleep_time,
+            userRecord.accountability_mode,
+            userRecord.created_at || Date.now(),
+            userRecord.updated_at || Date.now()
+          ]
+        );
+      }
+
+      // Initialize sync state in the background without blocking the UI
+      pullSync().catch(console.error);
 
       // Skip task generation and go straight to dashboard
       router.push('/(tabs)');

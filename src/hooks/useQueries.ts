@@ -47,7 +47,11 @@ export const useAllTasksForToday = (userId?: string) => {
       for (const r of routines) {
         let targetWeek = 1;
         if (r.ai_generated_at) {
-          const diffDays = Math.floor((Date.now() - r.ai_generated_at) / (1000 * 60 * 60 * 24));
+          const startOfRoutineDay = new Date(r.ai_generated_at);
+          startOfRoutineDay.setHours(0, 0, 0, 0);
+          const startOfToday = new Date();
+          startOfToday.setHours(0, 0, 0, 0);
+          const diffDays = Math.round((startOfToday.getTime() - startOfRoutineDay.getTime()) / (1000 * 60 * 60 * 24));
           targetWeek = Math.floor(diffDays / 7) + 1;
         }
         
