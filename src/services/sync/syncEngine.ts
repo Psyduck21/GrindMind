@@ -4,6 +4,7 @@ import uuid from 'react-native-uuid';
 import NetInfo from '@react-native-community/netinfo';
 
 export const SYNCABLE_TABLES = [
+  'users',
   'tasks',
   'subtasks',
   'routine_weeks',

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, TextInput, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TextInput, KeyboardAvoidingView, Platform, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,41 +7,56 @@ import { COLORS, TYPOGRAPHY, SHADOWS } from '../../src/constants/theme';
 import { Button } from '../../src/components/ui/Button';
 import { FloatingCard } from '../../src/components/ui/FloatingCard';
 import { supabase } from '../../src/supabase/client';
+import { runFullSync } from '../../src/services/sync/syncEngine';
+import { db } from '../../src/db/db';
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
 
   const handleAuth = async () => {
+    setErrorMsg(null);
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter your email and password');
+      setErrorMsg('Please enter your email and password');
       return;
     }
 
     setLoading(true);
+    setLoadingMsg(isSignUp ? 'Creating account...' : 'Signing in...');
     try {
       if (isSignUp) {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) {
-          Alert.alert('Registration Failed', error.message);
+          setErrorMsg(error.message);
         } else {
           router.replace('/(auth)/onboarding');
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) {
-          Alert.alert('Sign in failed', error.message);
+          setErrorMsg(error.message);
         } else if (data.session) {
-          router.replace('/(tabs)');
+          setLoadingMsg('Syncing your profile...');
+          await runFullSync();
+          
+          const user = db.getFirstSync('SELECT id FROM users LIMIT 1');
+          if (!user) {
+            router.replace('/(auth)/onboarding');
+          } else {
+            router.replace('/(tabs)');
+          }
         }
       }
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      setErrorMsg(e.message || 'An unexpected error occurred');
     } finally {
       setLoading(false);
+      setLoadingMsg(null);
     }
   };
 
@@ -66,6 +81,11 @@ export default function WelcomeScreen() {
             <FloatingCard style={styles.authCard}>
               <Text style={styles.cardTitle}>{isSignUp ? "Create an account" : "Welcome back"}</Text>
               
+              {errorMsg && (
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>{errorMsg}</Text>
+                </View>
+              )}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Email</Text>
                 <TextInput
@@ -108,6 +128,13 @@ export default function WelcomeScreen() {
           </KeyboardAvoidingView>
         </SafeAreaView>
       </LinearGradient>
+
+      {loadingMsg && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>{loadingMsg}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -179,5 +206,30 @@ const styles = StyleSheet.create({
   toggleText: {
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.txt2,
+  },
+  errorContainer: {
+    backgroundColor: 'rgba(255, 71, 87, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 71, 87, 0.5)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.danger,
+    textAlign: 'center',
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  loadingText: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.white,
+    marginTop: 16,
   },
 });
