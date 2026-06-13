@@ -43,7 +43,7 @@ export default function WelcomeScreen() {
         } else if (data.session) {
           setLoadingMsg('Syncing your profile...');
           await runFullSync();
-          
+
           const user = db.getFirstSync('SELECT id FROM users LIMIT 1');
           if (!user) {
             router.replace('/(auth)/onboarding');
@@ -69,7 +69,7 @@ export default function WelcomeScreen() {
         style={styles.gradientBg}
       >
         <SafeAreaView style={{ flex: 1 }}>
-          <KeyboardAvoidingView 
+          <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.content}
           >
@@ -80,7 +80,7 @@ export default function WelcomeScreen() {
 
             <FloatingCard style={styles.authCard}>
               <Text style={styles.cardTitle}>{isSignUp ? "Create an account" : "Welcome back"}</Text>
-              
+
               {errorMsg && (
                 <View style={styles.errorContainer}>
                   <Text style={styles.errorText}>{errorMsg}</Text>
@@ -110,7 +110,7 @@ export default function WelcomeScreen() {
                   onChangeText={setPassword}
                 />
               </View>
-              
+
               <Button
                 title={isSignUp ? "Sign Up" : "Sign In"}
                 loading={loading}
