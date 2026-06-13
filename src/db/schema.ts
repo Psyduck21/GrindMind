@@ -1,6 +1,10 @@
 import { db } from './db';
 
 export const setupDatabase = () => {
+  // Try to alter existing tasks table to add new columns, ignore errors if they exist
+  try { db.execSync('ALTER TABLE tasks ADD COLUMN target_week INTEGER DEFAULT 1;'); } catch (e) {}
+  try { db.execSync('ALTER TABLE tasks ADD COLUMN target_day TEXT DEFAULT "Monday";'); } catch (e) {}
+
   db.execSync(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -33,6 +37,17 @@ export const setupDatabase = () => {
       updated_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS routine_weeks (
+      id TEXT PRIMARY KEY,
+      routine_id TEXT NOT NULL REFERENCES routines(id),
+      week_number INTEGER NOT NULL,
+      is_completed INTEGER DEFAULT 0,
+      completed_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(routine_id, week_number)
+    );
+
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
       routine_id TEXT NOT NULL REFERENCES routines(id),
@@ -48,8 +63,18 @@ export const setupDatabase = () => {
       recovery_weight REAL DEFAULT 1.0,
       is_recovery_task INTEGER DEFAULT 0,
       recurrence_rule TEXT,
+      target_week INTEGER DEFAULT 1,
+      target_day TEXT DEFAULT 'Monday',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS subtasks (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES tasks(id),
+      title TEXT NOT NULL,
+      is_completed INTEGER DEFAULT 0,
+      created_at INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS habits (
@@ -142,6 +167,19 @@ export const setupDatabase = () => {
       snapshot TEXT NOT NULL,
       reason TEXT,
       created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_queue (
+      id TEXT PRIMARY KEY,
+      table_name TEXT NOT NULL,
+      operation TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_state (
+      id TEXT PRIMARY KEY,
+      last_synced_at INTEGER NOT NULL
     );
   `);
 };

@@ -6,9 +6,9 @@ interface OnboardingStore {
   updateData: (partial: Partial<OnboardingData>) => void;
   reset: () => void;
   // Multi-turn AI question flow
-  aiQuestion?: string | null;
+  aiQuestions?: string[] | null;
   aiAnswers?: Record<string, string>;
-  setAIQuestion?: (q: string | null) => void;
+  setAIQuestions?: (q: string[] | null) => void;
   addAIAnswer?: (question: string, answer: string) => void;
 }
 
@@ -30,8 +30,8 @@ export const useOnboardingStore = create<OnboardingStore>((set) => ({
       accountabilityMode: 'coach',
     }
   }),
-  aiQuestion: null,
+  aiQuestions: null,
   aiAnswers: {},
-  setAIQuestion: (q) => set(() => ({ aiQuestion: q })),
+  setAIQuestions: (q) => set(() => ({ aiQuestions: q })),
   addAIAnswer: (question, answer) => set((state) => ({ aiAnswers: { ...(state.aiAnswers || {}), [question]: answer } })),
 }));

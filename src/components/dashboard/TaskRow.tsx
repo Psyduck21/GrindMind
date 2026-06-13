@@ -1,6 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { COLORS, TYPOGRAPHY } from '../../constants/theme';
+import { COLORS, TYPOGRAPHY, SHADOWS } from '../../constants/theme';
+import Svg, { Circle, Path } from 'react-native-svg';
+
+export interface Subtask {
+  id: string;
+  title: string;
+  is_completed: number;
+}
 
 export interface TaskItem {
   id: string;
@@ -10,135 +17,231 @@ export interface TaskItem {
   priority: 'critical' | 'high' | 'medium' | 'low';
   status: 'not_started' | 'completed' | 'missed' | 'skipped';
   is_recovery_task: number;
+  subtasks?: Subtask[];
 }
 
 interface TaskRowProps {
   task: TaskItem;
   onPress: () => void;
+  onToggleSubtask?: (subtaskId: string) => void;
 }
 
-export function TaskRow({ task, onPress }: TaskRowProps) {
-  const isCritical = task.priority === 'high';
+export function TaskRow({ task, onPress, onToggleSubtask }: TaskRowProps) {
+  const isCritical = task.priority === 'high' || task.priority === 'critical';
   const isRecovery = task.is_recovery_task === 1;
   const isDone = task.status === 'completed';
 
-  const getLeftBorderStyle = () => {
-    if (isCritical) return { borderLeftWidth: 3, borderLeftColor: COLORS.txt };
-    if (isRecovery) return { borderLeftWidth: 3, borderLeftColor: COLORS.grn };
-    return {};
-  };
-
-  const getDotStyle = () => {
-    if (isCritical) return { backgroundColor: COLORS.txt };
-    if (isRecovery) return { backgroundColor: COLORS.grn };
-    if (isDone) return { backgroundColor: COLORS.txt3 };
-    return { backgroundColor: COLORS.border2 };
+  const renderTimelineIcon = () => {
+    if (isDone) {
+      return (
+        <View style={[styles.iconContainer, { backgroundColor: COLORS.txt }]}>
+          <Svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <Path d="M20 6L9 17L4 12" stroke={COLORS.white} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+          </Svg>
+        </View>
+      );
+    }
+    return (
+      <View style={[styles.iconContainer, { backgroundColor: COLORS.lightMint, borderWidth: 2, borderColor: isCritical ? COLORS.warning : COLORS.txt }]}>
+        <View style={[styles.innerDot, { backgroundColor: isCritical ? COLORS.warning : COLORS.txt }]} />
+      </View>
+    );
   };
 
   const getPill = () => {
-    if (isDone) return <View style={[styles.pill, styles.pillGreen]}><Text style={styles.pillTextGreen}>✓</Text></View>;
-    if (isCritical) return <View style={[styles.pill, styles.pillDark]}><Text style={styles.pillTextDark}>CRITICAL</Text></View>;
-    if (isRecovery) return <View style={[styles.pill, styles.pillGreen]}><Text style={styles.pillTextGreen}>MAKE UP</Text></View>;
+    if (isDone) return null; // Icon handles it
+    if (isCritical) return <View style={[styles.pill, { backgroundColor: 'rgba(255, 165, 2, 0.1)' }]}><Text style={[styles.pillText, { color: COLORS.warning }]}>CRITICAL</Text></View>;
+    if (isRecovery) return <View style={[styles.pill, { backgroundColor: COLORS.lightMint }]}><Text style={[styles.pillText, { color: COLORS.txt }]}>RECOVERY</Text></View>;
     return null;
   };
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.7}
-      onPress={onPress}
-      style={[
-        styles.container,
-        getLeftBorderStyle(),
-        isDone && styles.containerDone,
-      ]}
-    >
-      <View style={[styles.dot, getDotStyle()]} />
-      <View style={styles.content}>
-        <Text
-          style={[
-            styles.title,
-            isDone && styles.titleDone,
-            isRecovery && !isDone && styles.titleRecovery,
-          ]}
-          numberOfLines={1}
-        >
-          {task.title}
-        </Text>
-        <Text style={styles.time}>
-          {task.scheduled_time} • {task.estimated_duration_minutes} min
-        </Text>
-      </View>
-      {getPill()}
-    </TouchableOpacity>
+    <View style={styles.timelineWrapper}>
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={onPress}
+        style={[
+          styles.card,
+          isDone && styles.cardDone,
+        ]}
+      >
+        <View style={{ flex: 1 }}>
+          <View style={styles.cardHeader}>
+            <View style={styles.content}>
+              <Text
+                style={[
+                  styles.title,
+                  isDone && styles.titleDone,
+                  isRecovery && !isDone && styles.titleRecovery,
+                ]}
+                numberOfLines={1}
+              >
+                {task.title}
+              </Text>
+              <Text style={styles.time}>
+                {task.estimated_duration_minutes} min
+              </Text>
+            </View>
+
+            <View style={styles.rightSection}>
+              {getPill()}
+              <Text style={styles.scheduledTime}>{task.scheduled_time}</Text>
+            </View>
+          </View>
+
+          {/* Subtasks */}
+          {task.subtasks && task.subtasks.length > 0 && (
+            <View style={styles.subtasksContainer}>
+              {task.subtasks.map((subtask) => (
+                <TouchableOpacity 
+                  key={subtask.id} 
+                  style={styles.subtaskRow}
+                  activeOpacity={0.7}
+                  onPress={(e) => {
+                    e.stopPropagation(); // prevent clicking the card
+                    onToggleSubtask?.(subtask.id);
+                  }}
+                >
+                  <View style={[styles.subtaskCheckbox, subtask.is_completed === 1 && styles.subtaskCheckboxDone]}>
+                    {subtask.is_completed === 1 && (
+                      <Svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                        <Path d="M20 6L9 17L4 12" stroke={COLORS.white} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                      </Svg>
+                    )}
+                  </View>
+                  <Text style={[styles.subtaskTitle, subtask.is_completed === 1 && styles.subtaskTitleDone]}>
+                    {subtask.title}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: COLORS.s1,
+  timelineWrapper: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  railContainer: {
+    width: 32,
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  railLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: COLORS.border,
+  },
+  iconContainer: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 4,
+    zIndex: 2,
+  },
+  innerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  card: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'column',
+    ...SHADOWS.floating,
+  },
+  cardDone: {
+    backgroundColor: COLORS.bg, // Recedes into background
+    elevation: 0,
+    shadowOpacity: 0,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+  },
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-    gap: 10,
-  },
-  containerDone: {
-    opacity: 0.5,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
   },
   content: {
     flex: 1,
   },
   title: {
     ...TYPOGRAPHY.bodyBold,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   titleDone: {
     textDecorationLine: 'line-through',
-    color: COLORS.txt3,
+    color: COLORS.txt2,
   },
   titleRecovery: {
-    color: COLORS.grnHi,
+    color: COLORS.darkEmerald,
   },
   time: {
     ...TYPOGRAPHY.small,
+    color: COLORS.txt2,
   },
-  pill: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    alignItems: 'center',
+  rightSection: {
+    alignItems: 'flex-end',
     justifyContent: 'center',
   },
-  pillDark: {
-    backgroundColor: COLORS.white10,
-    borderColor: COLORS.border2,
-  },
-  pillTextDark: {
-    ...TYPOGRAPHY.small,
-    fontSize: 8,
-    letterSpacing: 0.5,
-    fontWeight: '700',
+  scheduledTime: {
+    ...TYPOGRAPHY.h2,
+    fontSize: 14,
     color: COLORS.txt,
+    marginTop: 4,
   },
-  pillGreen: {
-    backgroundColor: COLORS.grnPill,
-    borderColor: COLORS.grnBdr,
+  pill: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  pillTextGreen: {
-    ...TYPOGRAPHY.small,
-    fontSize: 8,
+  pillText: {
+    ...TYPOGRAPHY.caption,
+    textTransform: 'uppercase',
     letterSpacing: 0.5,
-    fontWeight: '700',
-    color: COLORS.grnHi,
+  },
+  subtasksContainer: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border2,
+    gap: 8,
+  },
+  subtaskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  subtaskCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    marginRight: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  subtaskCheckboxDone: {
+    backgroundColor: COLORS.txt,
+    borderColor: COLORS.txt,
+  },
+  subtaskTitle: {
+    ...TYPOGRAPHY.body,
+    fontSize: 14,
+    color: COLORS.txt2,
+    flex: 1,
+  },
+  subtaskTitleDone: {
+    textDecorationLine: 'line-through',
+    color: COLORS.txt2,
   },
 });

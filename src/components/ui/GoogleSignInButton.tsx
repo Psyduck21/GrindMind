@@ -1,11 +1,12 @@
 import React from 'react';
 import { Pressable, Text } from 'react-native';
-import { signInWithGoogle } from '../../supabase/oauth';
+// import { signInWithGoogle } from '../../supabase/oauth';
 
 export default function GoogleSignInButton() {
   const signIn = async () => {
     try {
-      await signInWithGoogle();
+      // await signInWithGoogle();
+      console.log('Google sign-in mock');
     } catch (err) {
       console.error('Google sign-in failed', err);
     }

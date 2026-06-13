@@ -6,31 +6,33 @@ Your philosophy is: Accountability over planning, consequences over punishment, 
 You do NOT chat. You only output structured JSON.
 
 Generate a routine plan for a user based on their profile.
-Output exactly and only this JSON schema:
+Output exactly and only this JSON schema. Do not deviate, do not omit fields, do not return extra fields.
 {
   "routine": {
-    "title": string,
-    "goal": string
+    "title": "String",
+    "goal": "String"
   },
   "tasks": [
     {
-      "title": string,
-      "description": string,
+      "title": "String",
+      "description": "String",
       "priority": "high" | "medium" | "low",
-      "category": string,
-      "scheduled_time": string (HH:MM),
-      "estimated_duration_minutes": number,
-      "consequence_weight": number (1.0 to 3.0),
-      "recurrence_rule": "FREQ=DAILY" (or similar standard iCal RRULE)
+      "category": "String",
+      "scheduled_time": "String (HH:MM)",
+      "estimated_duration_minutes": Number,
+      "consequence_weight": Number (1.0 to 3.0),
+      "recurrence_rule": "String (e.g., FREQ=DAILY)"
     }
   ]
 }
 
 Ensure the tasks fit within the user's daily available minutes and wake/sleep boundaries.
 Be very practical, specific, and demanding based on the user's accountability mode.
+Every single field must be present and correctly typed. "priority" must be exactly one of "high", "medium", or "low".
 `;
 
-export const generateRoutinePrompt = (userData: OnboardingData) => {
+export const generateRoutinePrompt = (userData: OnboardingData, previousAnswers?: Record<string, string>) => {
+  const extra = previousAnswers ? Object.entries(previousAnswers).map(([k,v]) => `- Q: ${k}\n  A: ${v}`).join('\n') : '';
   return `
 ${MASTER_PROMPT}
 
@@ -42,27 +44,31 @@ User Profile:
 - Sleep Time: ${userData.sleepTime}
 - Daily Commitment: ${userData.dailyMinutes} minutes
 
+User's Additional Context (Answers to your questions):
+${extra}
+
 Generate a realistic but challenging daily routine for this user. 
 Limit to 3-5 core tasks.
 `;
 };
 
-export const MASTER_PROMPT_HOME_WORKOUT = `
-You are GrindMind, an AI Accountability Coach specialized in home workout plans.
-Always attempt to produce structured JSON following the standard routine schema.
-If there is missing or ambiguous information needed to produce a correct workout plan (equipment, preferred intensity, any physical limitations), instead of producing the routine, output exactly and only this JSON shape:
-{
-  "needs_input": true,
-  "question": "<short question asking for the missing detail>"
-}
-
-When all required information is present, output exactly and only the standard routine JSON schema (same as MASTER_PROMPT).
+export const MASTER_PROMPT_EXTRACTION = `
+You are GrindMind, an AI Accountability Coach.
+Your first task is to extract exactly 3 to 5 critical questions you need to ask the user to tailor their routine perfectly.
+Do NOT ask questions that are already answered by their profile (like their name, sleep time, or grind type).
+Instead, ask deep, specific questions based on their Grind Type to create a highly personalized routine.
+Output exactly and only a JSON array of strings containing the questions.
+Example:
+[
+  "What specific fitness equipment do you have at home?",
+  "Are you currently nursing any injuries?",
+  "What is your primary fitness goal for the next 30 days?"
+]
 `;
 
-export const generateHomeWorkoutPrompt = (userData: OnboardingData, previousAnswers?: Record<string,string>) => {
-  const extra = previousAnswers ? Object.entries(previousAnswers).map(([k,v]) => `- ${k}: ${v}`).join('\n') : '';
+export const extractQuestionsPrompt = (userData: OnboardingData) => {
   return `
-${MASTER_PROMPT_HOME_WORKOUT}
+${MASTER_PROMPT_EXTRACTION}
 
 User Profile:
 - Name: ${userData.name}
@@ -72,8 +78,6 @@ User Profile:
 - Sleep Time: ${userData.sleepTime}
 - Daily Commitment: ${userData.dailyMinutes} minutes
 
-${extra}
-
-Generate a home workout routine that fits the user's daily minutes and constraints. Limit to 3-5 exercises/tasks.
+Based on the profile above, generate the JSON array of questions.
 `;
 };

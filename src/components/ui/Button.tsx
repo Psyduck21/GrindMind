@@ -32,7 +32,7 @@ export function Button({
       case 'outline':
         return { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.border2 };
       case 'outline-dark':
-        return { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.white20 };
+        return { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.border2 };
       default:
         return { backgroundColor: COLORS.txt };
     }

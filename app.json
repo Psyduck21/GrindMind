@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "GrindMind",
-    "slug": "GrindMind",
+    "slug": "grindmind",
     "version": "1.0.0",
     "scheme": "grindmind",
     "orientation": "portrait",
@@ -13,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.akshatprj.grindmind"
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +23,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.akshatprj.grindmind"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -33,6 +35,13 @@
       "expo-secure-store",
       "expo-font",
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0df3a703-7a7e-4c24-a5b6-27077251099c"
+      }
+    },
+    "owner": "akshatprj"
   }
 }

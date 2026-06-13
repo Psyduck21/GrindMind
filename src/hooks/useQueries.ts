@@ -12,24 +12,90 @@ export const useUser = () => {
   });
 };
 
-export const useActiveRoutine = (userId?: string) => {
+export const useAllActiveRoutines = (userId?: string) => {
   return useQuery({
-    queryKey: ['routine', userId],
+    queryKey: ['routines', userId],
     queryFn: () => {
-      if (!userId) return null;
-      const routine = db.getFirstSync<any>('SELECT * FROM routines WHERE user_id = ? AND status = "active"', [userId]);
-      return routine || null;
+      if (!userId) return [];
+      return db.getAllSync<any>('SELECT * FROM routines WHERE user_id = ? AND status = "active"', [userId]);
     },
     enabled: !!userId,
   });
 };
 
-export const useTasks = (routineId?: string) => {
+export const useRoutine = (routineId?: string) => {
   return useQuery({
-    queryKey: ['tasks', routineId],
+    queryKey: ['routine_detail', routineId],
+    queryFn: () => {
+      if (!routineId) return null;
+      return db.getFirstSync<any>('SELECT * FROM routines WHERE id = ?', [routineId]) || null;
+    },
+    enabled: !!routineId,
+  });
+};
+
+export const useAllTasksForToday = (userId?: string) => {
+  return useQuery({
+    queryKey: ['tasks', 'all', 'today', userId],
+    queryFn: () => {
+      if (!userId) return [];
+      const routines = db.getAllSync<any>('SELECT * FROM routines WHERE user_id = ? AND status = "active"', [userId]);
+      const targetDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+      
+      let allTasks: any[] = [];
+      
+      for (const r of routines) {
+        let targetWeek = 1;
+        if (r.ai_generated_at) {
+          const diffDays = Math.floor((Date.now() - r.ai_generated_at) / (1000 * 60 * 60 * 24));
+          targetWeek = Math.floor(diffDays / 7) + 1;
+        }
+        
+        const tasks = db.getAllSync<any>(
+          'SELECT * FROM tasks WHERE routine_id = ? AND target_week = ? AND target_day = ? ORDER BY scheduled_time ASC',
+          [r.id, targetWeek, targetDay]
+        );
+        
+        const enrichedTasks = tasks.map(task => {
+          const subtasks = db.getAllSync<any>('SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC', [task.id]);
+          return { ...task, subtasks, routine_title: r.title, routine_type: r.routine_type };
+        });
+        
+        allTasks = [...allTasks, ...enrichedTasks];
+      }
+      
+      return allTasks;
+    },
+    enabled: !!userId,
+  });
+};
+
+export const useTasks = (routineId?: string, targetWeek?: number, targetDay?: string) => {
+  return useQuery({
+    queryKey: ['tasks', routineId, targetWeek, targetDay],
     queryFn: () => {
       if (!routineId) return [];
-      return db.getAllSync<any>('SELECT * FROM tasks WHERE routine_id = ? ORDER BY scheduled_time ASC', [routineId]);
+      
+      let query = 'SELECT * FROM tasks WHERE routine_id = ?';
+      const args: any[] = [routineId];
+      
+      if (targetWeek) {
+        query += ' AND target_week = ?';
+        args.push(targetWeek);
+      }
+      if (targetDay) {
+        query += ' AND target_day = ?';
+        args.push(targetDay);
+      }
+      
+      query += ' ORDER BY scheduled_time ASC';
+      const tasks = db.getAllSync<any>(query, args);
+      
+      const enrichedTasks = tasks.map(task => {
+        const subtasks = db.getAllSync<any>('SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC', [task.id]);
+        return { ...task, subtasks };
+      });
+      return enrichedTasks;
     },
     enabled: !!routineId,
   });
@@ -59,6 +125,17 @@ export const useHabits = (routineId?: string) => {
   });
 };
 
+export const useRoutineWeeks = (routineId?: string) => {
+  return useQuery({
+    queryKey: ['routine_weeks', routineId],
+    queryFn: () => {
+      if (!routineId) return [];
+      return db.getAllSync<any>('SELECT * FROM routine_weeks WHERE routine_id = ? AND is_completed = 1', [routineId]);
+    },
+    enabled: !!routineId,
+  });
+};
+
 export const useWeeklyReport = (userId?: string) => {
   return useQuery({
     queryKey: ['weekly_report', userId],
@@ -81,6 +158,48 @@ export const useWeeklyReport = (userId?: string) => {
         suggestions: JSON.parse(row.suggestions || '[]'),
         pattern: JSON.parse(row.behavior_summary || '{}'),
       };
+    },
+    enabled: !!userId,
+  });
+};
+
+export const useWeeklyCompletions = (userId?: string) => {
+  return useQuery({
+    queryKey: ['completions', 'weekly', userId],
+    queryFn: () => {
+      if (!userId) return [];
+      // We want to fetch completions from the last 7 days
+      // For MVP we just fetch all and filter/aggregate in JS, since SQLite dates might be tricky.
+      const allCompletions = db.getAllSync<any>(
+        'SELECT * FROM task_completions WHERE user_id = ? AND state = "completed"',
+        [userId]
+      );
+      
+      const countsByDate: Record<string, number> = {};
+      allCompletions.forEach((c) => {
+        countsByDate[c.date] = (countsByDate[c.date] || 0) + 1;
+      });
+
+      // Generate last 7 days array
+      const result = [];
+      const today = new Date();
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        // format YYYY-MM-DD
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
+        const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+        
+        result.push({
+          date: dateStr,
+          dayName,
+          count: countsByDate[dateStr] || 0
+        });
+      }
+      return result;
     },
     enabled: !!userId,
   });

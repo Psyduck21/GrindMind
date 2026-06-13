@@ -102,16 +102,16 @@ const styles = StyleSheet.create({
   },
   titleDone: {
     textDecorationLine: 'line-through',
-    color: COLORS.txt3,
+    color: COLORS.txt2,
   },
   meta: {
     ...TYPOGRAPHY.small,
-    color: COLORS.txt3,
+    color: COLORS.txt2,
   },
   badge: {
-    backgroundColor: COLORS.grnPill,
+    backgroundColor: COLORS.lightMint,
     borderWidth: 1,
-    borderColor: COLORS.grnBdr,
+    borderColor: COLORS.border,
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -128,6 +128,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...TYPOGRAPHY.small,
-    color: COLORS.txt3,
+    color: COLORS.txt2,
   },
 });

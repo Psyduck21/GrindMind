@@ -1,11 +1,10 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { db } from '../../src/db/db';
-import { COLORS, TYPOGRAPHY } from '../../src/constants/theme';
-import { CircularProgress } from '../../src/components/ui/CircularProgress';
+import { COLORS, TYPOGRAPHY, SHADOWS } from '../../src/constants/theme';
+import { FloatingCard } from '../../src/components/ui/FloatingCard';
 import { getTotalXp } from '../../src/services/gamification/xpEngine';
 import { calculateStreak } from '../../src/services/scoring/streakCalculator';
 import { calculatePromiseKeptRate } from '../../src/services/scoring/scoreEngine';
@@ -13,13 +12,13 @@ import { getAchievements } from '../../src/services/gamification/badgeEngine';
 import { getLevelInfo } from '../../src/constants/xpConfig';
 import { BADGE_DEFINITIONS } from '../../src/constants/badgeDefinitions';
 import { supabase } from '../../src/supabase/client';
+import { useUser, useWeeklyCompletions } from '../../src/hooks/useQueries';
+import { AnimatedLineChart } from '../../src/components/profile/AnimatedLineChart';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { data: user } = useQuery({
-    queryKey: ['user'],
-    queryFn: () => db.getFirstSync<any>('SELECT * FROM users LIMIT 1'),
-  });
+  const { data: user } = useUser();
+  const { data: weeklyCompletions } = useWeeklyCompletions(user?.id);
 
   const stats = useMemo(() => {
     if (!user?.id) return null;
@@ -49,38 +48,37 @@ export default function ProfileScreen() {
   if (!user || !stats) return null;
 
   const modeLabel: Record<string, string> = {
-    friendly: 'Friendly 😊',
-    coach: 'Coach 💪',
-    military: 'Military 🎖️',
-    savage: 'Savage 🔥',
-    iron_discipline: 'Iron Discipline ☠️',
+    friendly: 'Friendly',
+    coach: 'Coach',
+    military: 'Military',
+    savage: 'Savage',
+    iron_discipline: 'Iron Discipline',
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* ─── Header ─── */}
+        {/* ─── Premium Header ─── */}
         <View style={styles.profileHeader}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{user.name?.[0]?.toUpperCase()}</Text>
-          </View>
-          <View>
-            <Text style={styles.name}>{user.name}</Text>
-            <Text style={styles.goal}>{user.primary_goal?.toUpperCase()}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 }}>
-            <View style={styles.modePill}>
-              <Text style={styles.modeText}>{modeLabel[user.accountability_mode] || user.accountability_mode}</Text>
-            </View>
-            <TouchableOpacity onPress={() => router.push('/settings')}>
-              <Text style={{ fontSize: 20 }}>⚙️</Text>
-            </TouchableOpacity>
+          <Text style={styles.nameHeading}>{user.name}</Text>
+          <View style={styles.modePill}>
+            <Text style={styles.modeText}>{modeLabel[user.accountability_mode] || user.accountability_mode}</Text>
           </View>
         </View>
 
-        {/* ─── Level Card ─── */}
-        <View style={styles.levelCard}>
+        {/* ─── Animated Analytics Chart ─── */}
+        <AnimatedLineChart data={weeklyCompletions || []} />
+
+        {/* ─── Core Stats Grid ─── */}
+        <View style={styles.statsGrid}>
+          <StatCard label="Day Streak" value={`${stats.streak}`} />
+          <StatCard label="Promise Kept" value={`${stats.promiseKept}%`} />
+          <StatCard label="Completed" value={`${stats.totalCompleted}`} />
+        </View>
+
+        {/* ─── Level Progression ─── */}
+        <FloatingCard style={styles.levelCard}>
           <View style={styles.levelRow}>
             <View>
               <Text style={styles.levelTitle}>Level {stats.current.level}</Text>
@@ -95,15 +93,7 @@ export default function ProfileScreen() {
             <View style={[styles.xpFill, { width: `${stats.progress * 100}%` }]} />
           </View>
           <Text style={styles.xpLabel}>{stats.xp} XP total</Text>
-        </View>
-
-        {/* ─── Stats Grid ─── */}
-        <View style={styles.statsGrid}>
-          <StatCard icon="🔥" label="Streak" value={`${stats.streak}d`} />
-          <StatCard icon="📊" label="Promise Kept" value={`${stats.promiseKept}%`} />
-          <StatCard icon="✅" label="Completed" value={`${stats.totalCompleted}`} />
-          <StatCard icon="❌" label="Skipped" value={`${stats.totalSkipped}`} />
-        </View>
+        </FloatingCard>
 
         {/* ─── Achievements ─── */}
         <View style={styles.section}>
@@ -119,6 +109,7 @@ export default function ProfileScreen() {
                     earned ? `${def.icon} ${def.name}` : '🔒 Locked',
                     earned ? def.description : `Unlock condition: ${def.description}`
                   )}
+                  activeOpacity={0.7}
                 >
                   <Text style={[styles.badgeIcon, !earned && styles.badgeIconLocked]}>
                     {earned ? def.icon : '🔒'}
@@ -135,10 +126,9 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* ─── Account ─── */}
+        {/* ─── Settings & Account ─── */}
         <View style={styles.section}>
-          <Text style={styles.sectionHead}>Account</Text>
-          <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+          <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut} activeOpacity={0.8}>
             <Text style={styles.signOutText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
@@ -148,148 +138,132 @@ export default function ProfileScreen() {
   );
 }
 
-function StatCard({ icon, label, value }: { icon: string; label: string; value: string }) {
+function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.statCard}>
-      <Text style={styles.statIcon}>{icon}</Text>
+    <FloatingCard style={styles.statCard} padding={16}>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    </FloatingCard>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  scroll: { padding: 16, paddingBottom: 48 },
+  scroll: { padding: 24, paddingBottom: 100 },
 
   profileHeader: {
-    flexDirection: 'row',
+    marginBottom: 32,
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 20,
+    marginTop: 20,
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.s3,
-    borderWidth: 1.5,
-    borderColor: COLORS.border2,
-    alignItems: 'center',
-    justifyContent: 'center',
+  nameHeading: {
+    ...TYPOGRAPHY.display,
+    fontSize: 40,
+    color: COLORS.txt,
+    textAlign: 'center',
+    marginBottom: 12,
   },
-  avatarText: { ...TYPOGRAPHY.display, fontSize: 20 },
-  name: { ...TYPOGRAPHY.title },
-  goal: { ...TYPOGRAPHY.small, color: COLORS.txt3, letterSpacing: 1 },
   modePill: {
-    marginLeft: 'auto',
-    backgroundColor: COLORS.s2,
+    backgroundColor: COLORS.lightMint,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    borderColor: 'rgba(20, 200, 181, 0.2)',
   },
-  modeText: { ...TYPOGRAPHY.small, color: COLORS.txt2 },
+  modeText: { 
+    ...TYPOGRAPHY.h3, 
+    color: COLORS.txt 
+  },
 
   levelCard: {
-    backgroundColor: COLORS.s1,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    marginBottom: 32,
   },
-  levelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  levelTitle: { ...TYPOGRAPHY.display, fontSize: 20 },
-  levelLabel: { ...TYPOGRAPHY.small, color: COLORS.txt2 },
-  nextLevel: { ...TYPOGRAPHY.small, color: COLORS.txt3 },
+  levelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  levelTitle: { ...TYPOGRAPHY.display, fontSize: 24, color: COLORS.txt },
+  levelLabel: { ...TYPOGRAPHY.bodyBold, color: COLORS.txt },
+  nextLevel: { ...TYPOGRAPHY.caption, color: COLORS.txt2, marginTop: 8 },
   xpTrack: {
-    height: 6,
-    backgroundColor: COLORS.s3,
-    borderRadius: 3,
+    height: 8,
+    backgroundColor: COLORS.bg,
+    borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   xpFill: {
     height: '100%',
-    backgroundColor: COLORS.grn,
-    borderRadius: 3,
+    backgroundColor: COLORS.primary,
+    borderRadius: 4,
   },
-  xpLabel: { ...TYPOGRAPHY.small, color: COLORS.txt3, textAlign: 'right' },
+  xpLabel: { ...TYPOGRAPHY.small, color: COLORS.txt2, textAlign: 'right' },
 
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 20,
+    gap: 12,
+    marginBottom: 32,
   },
   statCard: {
     flex: 1,
-    minWidth: '45%',
-    backgroundColor: COLORS.s1,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    padding: 14,
+    minWidth: '30%',
     alignItems: 'center',
     gap: 4,
   },
-  statIcon: { fontSize: 22 },
-  statValue: { ...TYPOGRAPHY.display, fontSize: 22 },
-  statLabel: { ...TYPOGRAPHY.small, color: COLORS.txt3 },
+  statIcon: { fontSize: 24, marginBottom: 4 },
+  statValue: { ...TYPOGRAPHY.h2 },
+  statLabel: { ...TYPOGRAPHY.caption, color: COLORS.txt2, textAlign: 'center' },
 
-  section: { marginBottom: 20 },
+  section: { marginBottom: 32 },
   sectionHead: {
-    ...TYPOGRAPHY.small,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    marginBottom: 12,
-    color: COLORS.txt2,
+    ...TYPOGRAPHY.h2,
+    marginBottom: 16,
+    color: COLORS.txt,
   },
 
   badgeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 12,
   },
   badgeCard: {
     width: '30%',
     flex: 1,
     minWidth: '28%',
-    backgroundColor: COLORS.s1,
-    borderWidth: 1,
-    borderColor: COLORS.grnBdr,
-    borderRadius: 10,
-    padding: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 12,
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    ...SHADOWS.floating,
   },
   badgeCardLocked: {
-    borderColor: COLORS.border,
-    opacity: 0.45,
+    backgroundColor: COLORS.bg,
+    elevation: 0,
+    shadowOpacity: 0,
+    opacity: 0.6,
   },
-  badgeIcon: { fontSize: 26 },
+  badgeIcon: { fontSize: 32, marginBottom: 4 },
   badgeIconLocked: { opacity: 0.5 },
   badgeName: {
-    ...TYPOGRAPHY.small,
-    fontWeight: '700',
+    ...TYPOGRAPHY.caption,
     textAlign: 'center',
-    fontSize: 10,
+    lineHeight: 14,
   },
-  badgeNameLocked: { color: COLORS.txt3 },
+  badgeNameLocked: { color: COLORS.txt2 },
   badgeXp: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: COLORS.grnHi,
+    ...TYPOGRAPHY.caption,
+    fontSize: 10,
+    color: COLORS.txt,
   },
 
   signOutBtn: {
-    borderWidth: 1,
-    borderColor: COLORS.border2,
-    borderRadius: 8,
-    paddingVertical: 14,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    paddingVertical: 16,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 71, 87, 0.2)',
+    ...SHADOWS.floating,
   },
-  signOutText: { ...TYPOGRAPHY.body, color: COLORS.danger },
+  signOutText: { ...TYPOGRAPHY.button, color: COLORS.danger },
 });

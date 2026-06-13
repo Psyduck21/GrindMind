@@ -4,14 +4,13 @@ import { generateRoutinePrompt } from './prompt';
 import { GeneratedRoutineSchema, GeneratedRoutine } from './schema';
 import { z } from 'zod';
 
-export const API_KEY_STORE_KEY = 'gemini_api_key';
 export const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 export const generateRoutine = async (userData: OnboardingData): Promise<GeneratedRoutine> => {
-  const apiKey = await SecureStore.getItemAsync(API_KEY_STORE_KEY);
-  
+  // If an environment variable is provided, use it first. Otherwise, fall back to SecureStore.
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('No Gemini API key found. Please set it in Settings.');
+    throw new Error('No Gemini API key found. Please set it in Settings or via EXPO_PUBLIC_GEMINI_API_KEY.');
   }
 
   const prompt = generateRoutinePrompt(userData);
@@ -32,6 +31,7 @@ export const generateRoutine = async (userData: OnboardingData): Promise<Generat
     },
   };
 
+  console.log(apiKey)
   const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
     method: 'POST',
     headers: {

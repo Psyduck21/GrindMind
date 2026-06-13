@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { COLORS, TYPOGRAPHY } from '../../src/constants/theme';
+import { COLORS, TYPOGRAPHY, SHADOWS } from '../../src/constants/theme';
 import { Button } from '../../src/components/ui/Button';
-import { useUser, useActiveRoutine, useWeeklyReport } from '../../src/hooks/useQueries';
+import { FloatingCard } from '../../src/components/ui/FloatingCard';
+import { useUser, useAllActiveRoutines, useWeeklyReport } from '../../src/hooks/useQueries';
 import { generateWeeklyReport } from '../../src/services/behavior/weeklyReportGenerator';
 
 export default function ReviewScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: user } = useUser();
-  const { data: routine } = useActiveRoutine(user?.id);
+  const { data: routines } = useAllActiveRoutines(user?.id);
+  const routine = routines?.[0];
   const { data: report, isLoading: reportLoading } = useWeeklyReport(user?.id);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -39,7 +41,6 @@ export default function ReviewScreen() {
           text: 'Rebuild', 
           style: 'destructive',
           onPress: () => {
-            // Future: Archive routine logic, then route to onboarding generator
             router.push('/(auth)/onboarding');
           }
         }
@@ -51,7 +52,7 @@ export default function ReviewScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.title}>Weekly Review</Text>
           <Button 
@@ -63,13 +64,15 @@ export default function ReviewScreen() {
         </View>
 
         {!report ? (
-          <View style={styles.empty}>
+          <FloatingCard style={styles.empty}>
             <Text style={styles.icon}>📊</Text>
             <Text style={styles.emptyText}>No report generated yet. Tap to run analysis on your recent behavior.</Text>
-          </View>
+          </FloatingCard>
         ) : (
           <View>
-            <Text style={styles.dateRange}>Week of {new Date(report.weekStart).toLocaleDateString()} – {new Date(report.weekEnd).toLocaleDateString()}</Text>
+            <Text style={styles.dateRange}>
+              Week of {new Date(report.weekStart).toLocaleDateString()} – {new Date(report.weekEnd).toLocaleDateString()}
+            </Text>
 
             {/* ─── Stats ─── */}
             <View style={styles.statsGrid}>
@@ -82,13 +85,13 @@ export default function ReviewScreen() {
             {/* ─── Pattern Analysis ─── */}
             <View style={styles.section}>
               <Text style={styles.sectionHead}>Behavior Patterns</Text>
-              <View style={styles.card}>
+              <FloatingCard padding={0}>
                 <PatternRow label="Worst Day" value={report.pattern.worstDayOfWeek || 'None'} />
                 <PatternRow label="Worst Time" value={report.pattern.worstTimeOfDay ? report.pattern.worstTimeOfDay.toUpperCase() : 'None'} />
                 <PatternRow label="Most Skipped" value={report.pattern.mostSkippedCategory || 'None'} />
                 <PatternRow label="Consecutive Misses" value={`${report.pattern.consecutiveMissDays} days`} />
                 <PatternRow label="Critical Tasks Missed" value={`${report.pattern.missedCriticalCount}`} noBorder />
-              </View>
+              </FloatingCard>
             </View>
 
             {/* ─── Suggestions ─── */}
@@ -98,9 +101,9 @@ export default function ReviewScreen() {
                 <Text style={styles.bodyText}>Keep up the good work! No major issues detected.</Text>
               ) : (
                 report.suggestions.map((s: any, idx: number) => (
-                  <View key={idx} style={[styles.suggestionCard, s.severity === 'critical' && styles.criticalCard]}>
+                  <FloatingCard key={idx} style={[styles.suggestionCard, s.severity === 'critical' && styles.criticalCard]}>
                     <View style={styles.suggestionHeader}>
-                      <Text style={[styles.suggestionType, s.severity === 'critical' && { color: COLORS.danger }]}>
+                      <Text style={[styles.suggestionType, s.severity === 'critical' && { color: COLORS.warning }]}>
                         {s.type.toUpperCase().replace('_', ' ')}
                       </Text>
                       {s.severity === 'critical' && <Text style={{ fontSize: 16 }}>⚠️</Text>}
@@ -112,11 +115,10 @@ export default function ReviewScreen() {
                       <Button 
                         title="Rebuild Routine" 
                         onPress={handleRebuild} 
-                        style={{ marginTop: 12, backgroundColor: COLORS.danger }}
-                        textStyle={{ color: '#fff' }}
+                        style={{ marginTop: 16, backgroundColor: COLORS.warning }}
                       />
                     )}
-                  </View>
+                  </FloatingCard>
                 ))
               )}
             </View>
@@ -129,10 +131,10 @@ export default function ReviewScreen() {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.statCard}>
+    <FloatingCard style={styles.statCard}>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    </FloatingCard>
   );
 }
 
@@ -147,53 +149,49 @@ function PatternRow({ label, value, noBorder = false }: { label: string; value: 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  scroll: { padding: 16, paddingBottom: 40 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  scroll: { padding: 24, paddingBottom: 100 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   title: { ...TYPOGRAPHY.display, fontSize: 28 },
-  dateRange: { ...TYPOGRAPHY.small, color: COLORS.txt2, marginBottom: 20, marginTop: -16 },
+  dateRange: { ...TYPOGRAPHY.small, color: COLORS.txt2, marginBottom: 24, marginTop: -16 },
   
   empty: {
-    padding: 32,
+    padding: 40,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
     borderStyle: 'dashed',
-    borderRadius: 12,
     marginTop: 32,
     gap: 16,
   },
   icon: { fontSize: 48 },
-  emptyText: { ...TYPOGRAPHY.body, color: COLORS.txt3, textAlign: 'center' },
+  emptyText: { ...TYPOGRAPHY.body, color: COLORS.txt2, textAlign: 'center' },
 
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 32 },
   statCard: {
-    flex: 1, minWidth: '45%',
-    backgroundColor: COLORS.s1, borderWidth: 1, borderColor: COLORS.border,
-    borderRadius: 8, padding: 16, alignItems: 'center'
+    flex: 1, 
+    minWidth: '45%',
+    alignItems: 'center',
+    padding: 20,
   },
-  statValue: { ...TYPOGRAPHY.display, fontSize: 24, marginBottom: 4 },
-  statLabel: { ...TYPOGRAPHY.small, color: COLORS.txt3 },
+  statValue: { ...TYPOGRAPHY.display, fontSize: 24, marginBottom: 4, color: COLORS.txt },
+  statLabel: { ...TYPOGRAPHY.small, color: COLORS.txt2 },
 
-  section: { marginBottom: 24 },
-  sectionHead: { ...TYPOGRAPHY.small, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 12, color: COLORS.txt2 },
-  card: {
-    backgroundColor: COLORS.s1, borderWidth: 1, borderColor: COLORS.border,
-    borderRadius: 12, paddingHorizontal: 16,
-  },
-  patternRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14 },
-  patternRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border2 },
+  section: { marginBottom: 32 },
+  sectionHead: { ...TYPOGRAPHY.caption, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16, color: COLORS.txt2 },
+  
+  patternRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 20 },
+  patternRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.bg },
   patternLabel: { ...TYPOGRAPHY.body, color: COLORS.txt2 },
-  patternValue: { ...TYPOGRAPHY.bodyBold },
+  patternValue: { ...TYPOGRAPHY.bodyBold, color: COLORS.txt },
 
   suggestionCard: {
-    backgroundColor: COLORS.s1, borderWidth: 1, borderColor: COLORS.border,
-    borderRadius: 12, padding: 16, marginBottom: 12,
+    marginBottom: 16,
   },
-  criticalCard: { borderColor: COLORS.danger, borderWidth: 2 },
-  suggestionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  suggestionType: { ...TYPOGRAPHY.small, color: COLORS.txt3, fontWeight: '700', letterSpacing: 1 },
-  suggestionTitle: { ...TYPOGRAPHY.title, fontSize: 16, marginBottom: 8 },
-  suggestionDesc: { ...TYPOGRAPHY.body, color: COLORS.txt2, lineHeight: 20 },
+  criticalCard: { borderColor: COLORS.warning, borderWidth: 2 },
+  suggestionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  suggestionType: { ...TYPOGRAPHY.caption, color: COLORS.txt, fontWeight: '700', letterSpacing: 1 },
+  suggestionTitle: { ...TYPOGRAPHY.h2, fontSize: 16, marginBottom: 8 },
+  suggestionDesc: { ...TYPOGRAPHY.body, color: COLORS.txt2, lineHeight: 22 },
   bodyText: { ...TYPOGRAPHY.body, color: COLORS.txt2 },
 });

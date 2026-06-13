@@ -1,30 +1,29 @@
 import { db } from '../../db/db';
 import uuid from 'react-native-uuid';
 import { TaskItem } from '../../components/dashboard/TaskRow';
-
 import { getLocalYYYYMMDD } from '../../utils/date';
+import { queueOperation } from '../sync/syncEngine';
 
 export const processTaskMiss = (task: TaskItem, userId: string, skipReason: string) => {
   const now = Date.now();
   const dateStr = getLocalYYYYMMDD();
   
   // 1. Log the skip in task_completions
+  const completionId = uuid.v4();
   db.runSync(
     `INSERT INTO task_completions (id, task_id, user_id, date, state, skip_reason, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [uuid.v4(), task.id, userId, dateStr, 'skipped', skipReason, now]
+    [completionId, task.id, userId, dateStr, 'skipped', skipReason, now]
   );
+  queueOperation('task_completions', 'INSERT', {
+    id: completionId, task_id: task.id, user_id: userId, date: dateStr, state: 'skipped', skip_reason: skipReason, created_at: now
+  });
   
   // 2. Update task status
   db.runSync(`UPDATE tasks SET status = 'skipped', updated_at = ? WHERE id = ?`, [now, task.id]);
+  queueOperation('tasks', 'UPDATE', { id: task.id, status: 'skipped', updated_at: now });
   
   // 3. Determine Consequence based on priority (Deterministic rules)
-  // TRD Logic:
-  // critical: moderate (+15 min), 2nd miss = strong
-  // high: light (short task), 2nd miss = moderate
-  // medium: optional make-up
-  // low: none
-  
   const pastMisses = db.getAllSync<any>(`SELECT id FROM task_completions WHERE task_id = ? AND state = 'skipped'`, [task.id]).length;
   
   let recoverySeverity = 'none';
@@ -63,13 +62,27 @@ export const processTaskMiss = (task: TaskItem, userId: string, skipReason: stri
         now
       ]
     );
+    queueOperation('recovery_tasks', 'INSERT', {
+      id: recoveryId, source_task_id: task.id, user_id: userId, title: `MAKE-UP: ${task.title}`, description: `Penalty for skipping. Original reason: ${skipReason}`, scheduled_date: tomorrowStr, severity: recoverySeverity, created_at: now, updated_at: now
+    });
+
+    const tomorrowDayName = tomorrow.toLocaleDateString('en-US', { weekday: 'long' });
+    const fullTask = db.getFirstSync<any>('SELECT * FROM tasks WHERE id = ?', [task.id]);
+    
+    let nextWeek = fullTask?.target_week || 1;
+    if (tomorrowDayName === 'Monday' && fullTask?.target_day === 'Sunday') {
+      nextWeek += 1;
+    }
 
     // Also push a real task into the schedule for tomorrow
+    const newTaskId = uuid.v4();
     db.runSync(
-      `INSERT INTO tasks (id, routine_id, title, description, priority, category, scheduled_time, estimated_duration_minutes, is_recovery_task, created_at, updated_at)
-       SELECT ?, routine_id, ?, ?, 'high', category, '06:00', ?, 1, ?, ?
-       FROM tasks WHERE id = ?`,
-       [uuid.v4(), `[RECOVERY] ${task.title}`, `You owe this time. Get it done.`, penaltyMinutes, now, now, task.id]
+      `INSERT INTO tasks (id, routine_id, title, description, priority, category, scheduled_time, estimated_duration_minutes, is_recovery_task, target_week, target_day, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'high', ?, '06:00', ?, 1, ?, ?, ?, ?)`,
+       [newTaskId, fullTask.routine_id, `[RECOVERY] ${task.title}`, `You owe this time. Get it done.`, fullTask.category, penaltyMinutes, nextWeek, tomorrowDayName, now, now]
     );
+    queueOperation('tasks', 'INSERT', {
+      id: newTaskId, routine_id: fullTask.routine_id, title: `[RECOVERY] ${task.title}`, description: `You owe this time. Get it done.`, priority: 'high', category: fullTask.category, scheduled_time: '06:00', estimated_duration_minutes: penaltyMinutes, is_recovery_task: 1, target_week: nextWeek, target_day: tomorrowDayName, created_at: now, updated_at: now
+    });
   }
 };

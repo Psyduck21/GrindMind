@@ -1,8 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
-import { generateHomeWorkoutPrompt } from './prompt';
-import { GeneratedRoutineSchema } from './schema';
+import { generateRoutinePrompt, extractQuestionsPrompt } from './prompt';
+import { GeneratedRoutineSchema, GeneratedRoutine } from './schema';
 import { OnboardingData } from '../../utils/validation';
-import { GEMINI_API_URL, API_KEY_STORE_KEY } from './gemini';
+import { GEMINI_API_URL } from './gemini';
 import { z } from 'zod';
 
 // Simple per-day request counter stored in SecureStore
@@ -16,33 +16,22 @@ async function incrementRequestCount() {
   await SecureStore.setItemAsync(key, String(n + 1));
 }
 
-type InteractiveResult =
-  | { needs_input: true; question: string }
-  | { routine: any };
+async function callGemini(prompt: string, responseSchema?: any) {
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  if (!apiKey) throw new Error('Missing Gemini API key in EXPO_PUBLIC_GEMINI_API_KEY');
 
-export const generateRoutineInteractive = async (
-  userData: OnboardingData,
-  previousAnswers?: Record<string, string>
-): Promise<InteractiveResult> => {
-  const apiKey = await SecureStore.getItemAsync(API_KEY_STORE_KEY);
-  if (!apiKey) throw new Error('Missing Gemini API key');
+  const generationConfig: any = {
+    temperature: 0.2,
+    responseMimeType: 'application/json',
+  };
 
-  const prompt = generateHomeWorkoutPrompt(userData, previousAnswers);
+  if (responseSchema) {
+    generationConfig.responseSchema = responseSchema;
+  }
 
   const requestBody = {
-    contents: [
-      {
-        parts: [
-          {
-            text: prompt,
-          },
-        ],
-      },
-    ],
-    generationConfig: {
-      temperature: 0.2,
-      responseMimeType: 'application/json',
-    },
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig,
   };
 
   const res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
@@ -60,10 +49,8 @@ export const generateRoutineInteractive = async (
   const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!jsonText) throw new Error('Invalid response from Gemini');
 
-  // Clean fenced codeblocks
   const cleaned = jsonText.replace(/```json/gi, '').replace(/```/g, '').trim();
 
-  // Try parse
   let parsed: any;
   try {
     parsed = JSON.parse(cleaned);
@@ -71,17 +58,73 @@ export const generateRoutineInteractive = async (
     throw new Error('Failed to parse Gemini JSON response');
   }
 
-  // If model asks for more input
-  if (parsed && parsed.needs_input && parsed.question) {
-    await incrementRequestCount();
-    return { needs_input: true, question: parsed.question };
+  return parsed;
+}
+
+export const extractAIQuestions = async (userData: OnboardingData): Promise<string[]> => {
+  const prompt = extractQuestionsPrompt(userData);
+  
+  const responseSchema = {
+    type: "ARRAY",
+    items: {
+      type: "STRING"
+    }
+  };
+
+  const parsed = await callGemini(prompt, responseSchema);
+
+  if (!Array.isArray(parsed)) {
+    throw new Error('Gemini did not return an array of questions');
   }
 
-  // Otherwise validate full routine
+  await incrementRequestCount();
+  return parsed.filter(q => typeof q === 'string').slice(0, 5);
+};
+
+export const generateRoutineInteractive = async (
+  userData: OnboardingData,
+  answers: Record<string, string>
+): Promise<GeneratedRoutine> => {
+  const prompt = generateRoutinePrompt(userData, answers);
+  
+  const responseSchema = {
+    type: "OBJECT",
+    properties: {
+      routine: {
+        type: "OBJECT",
+        properties: {
+          title: { type: "STRING" },
+          goal: { type: "STRING" }
+        },
+        required: ["title", "goal"]
+      },
+      tasks: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            title: { type: "STRING" },
+            description: { type: "STRING" },
+            priority: { type: "STRING", enum: ["high", "medium", "low"] },
+            category: { type: "STRING" },
+            scheduled_time: { type: "STRING" },
+            estimated_duration_minutes: { type: "INTEGER" },
+            consequence_weight: { type: "NUMBER" },
+            recurrence_rule: { type: "STRING" }
+          },
+          required: ["title", "description", "priority", "category", "scheduled_time", "estimated_duration_minutes", "consequence_weight"]
+        }
+      }
+    },
+    required: ["routine", "tasks"]
+  };
+
+  const parsed = await callGemini(prompt, responseSchema);
+
   try {
     const validated = GeneratedRoutineSchema.parse(parsed);
     await incrementRequestCount();
-    return { routine: validated };
+    return validated;
   } catch (e: any) {
     if (e instanceof z.ZodError) {
       throw new Error('Gemini response failed validation: ' + JSON.stringify(e.issues));

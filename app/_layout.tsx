@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { setupDatabase } from '../src/db/schema';
@@ -7,6 +8,9 @@ import { ThemeProvider, DefaultTheme } from '@react-navigation/native';
 import { COLORS } from '../src/constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import { scheduleDailyNotifications, requestNotificationPermissions } from '../src/services/notification/notificationScheduler';
+
+import NetInfo from '@react-native-community/netinfo';
+import { runFullSync } from '../src/services/sync/syncEngine';
 
 const queryClient = new QueryClient();
 
@@ -23,6 +27,13 @@ const AppTheme = {
 
 export default function RootLayout() {
   const [dbInitialized, setDbInitialized] = useState(false);
+
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+  });
 
   useEffect(() => {
     const boot = async () => {
@@ -46,12 +57,28 @@ export default function RootLayout() {
       }
 
       setDbInitialized(true);
+      
+      // Initial sync
+      runFullSync().catch(console.error);
     };
 
     boot();
   }, []);
 
-  if (!dbInitialized) {
+  // Listen for network connectivity to flush offline queue and pull updates
+  useEffect(() => {
+    if (!dbInitialized) return;
+
+    const unsubscribe = NetInfo.addEventListener(state => {
+      if (state.isConnected) {
+        runFullSync().catch(console.error);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [dbInitialized]);
+
+  if (!dbInitialized || !fontsLoaded) {
     return null; // Or a splash screen component
   }
 

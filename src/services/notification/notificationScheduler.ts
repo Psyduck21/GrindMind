@@ -59,13 +59,37 @@ export const cancelAllNotifications = async () => {
 };
 
 // ─── Schedule today's daily batch ────────────────────────────────────────────
+
+const getTodaysPendingTasks = (userId: string) => {
+  const routines = db.getAllSync<any>('SELECT * FROM routines WHERE user_id = ? AND status = "active"', [userId]);
+  const targetDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+
+  let allTasks: any[] = [];
+
+  for (const r of routines) {
+    let targetWeek = 1;
+    if (r.ai_generated_at) {
+      const diffDays = Math.floor((Date.now() - r.ai_generated_at) / (1000 * 60 * 60 * 24));
+      targetWeek = Math.floor(diffDays / 7) + 1;
+    }
+
+    const tasks = db.getAllSync<any>(
+      'SELECT * FROM tasks WHERE routine_id = ? AND target_week = ? AND target_day = ? AND status != "completed" AND status != "skipped" ORDER BY scheduled_time ASC',
+      [r.id, targetWeek, targetDay]
+    );
+
+    allTasks = [...allTasks, ...tasks];
+  }
+
+  return allTasks;
+};
+
 /**
- * Schedules 3 notifications for the day:
- * 1. Morning motivator — at wake time
+ * Schedules 3 notifications for the day + specific task reminders:
+ * 1. Morning motivator — at wake time (dynamically includes today's tasks)
  * 2. Midday check-in — midpoint between wake and sleep
  * 3. Evening review — 1 hour before sleep
- *
- * Quiet hours are enforced: no notification outside wake–sleep window.
+ * 4. Task Reminders — precise triggers for each scheduled task
  */
 export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
   const hasPermission = await requestNotificationPermissions();
@@ -104,22 +128,58 @@ export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
     logNotification(opts.userId, 'reminder', message, trigger.getTime());
   };
 
-  // 1. Morning — at wake time
-  scheduleTime(
-    wakeH,
-    wakeM,
-    getRoastMessage(opts.accountabilityMode, 'morning')
-  );
+  // Fetch today's tasks
+  const pendingTasks = getTodaysPendingTasks(opts.userId);
 
-  // 2. Midday — midpoint of productive hours
-  const midH = Math.floor((wakeH + sleepH) / 2);
+  // 1. Morning — at wake time
+  let morningMessage = getRoastMessage(opts.accountabilityMode, 'morning');
+  if (pendingTasks.length > 0) {
+    const titles = pendingTasks.slice(0, 3).map(t => t.title).join(', ');
+    const extra = pendingTasks.length > 3 ? ` and ${pendingTasks.length - 3} more` : '';
+    morningMessage = `Wake up! You have ${pendingTasks.length} tasks today: ${titles}${extra}.\n\n${morningMessage}`;
+  } else {
+    morningMessage = `Wake up! You have a free day today. Enjoy the rest.\n\n${morningMessage}`;
+  }
+
+  scheduleTime(wakeH, wakeM, morningMessage);
+
+  // Schedule task-specific reminders for each pending task
+  for (const task of pendingTasks) {
+    if (task.scheduled_time) {
+      await scheduleTaskReminder(task, opts.accountabilityMode, opts.wakeTime, opts.sleepTime, opts.userId);
+    }
+  }
+
+  // Calculate day length
+  const startMins = wakeH * 60 + wakeM;
+  const endMins = sleepH < wakeH ? (sleepH + 24) * 60 : sleepH * 60; // Handle wrapping past midnight
+  const dayDurationMins = endMins - startMins;
+
+  // 2. Mid-morning — 25% of the day
+  const q1Mins = startMins + Math.floor(dayDurationMins * 0.25);
   scheduleTime(
-    midH,
-    0,
+    Math.floor(q1Mins / 60) % 24,
+    q1Mins % 60,
     getRoastMessage(opts.accountabilityMode, 'missed_task')
   );
 
-  // 3. Evening — 1 hour before sleep
+  // 3. Midday — 50% of the day
+  const midMins = startMins + Math.floor(dayDurationMins * 0.5);
+  scheduleTime(
+    Math.floor(midMins / 60) % 24,
+    midMins % 60,
+    getRoastMessage(opts.accountabilityMode, 'missed_task')
+  );
+
+  // 4. Afternoon — 75% of the day
+  const q3Mins = startMins + Math.floor(dayDurationMins * 0.75);
+  scheduleTime(
+    Math.floor(q3Mins / 60) % 24,
+    q3Mins % 60,
+    getRoastMessage(opts.accountabilityMode, 'recovery_pending')
+  );
+
+  // 5. Evening — 1 hour before sleep
   const eveningH = sleepH > 0 ? sleepH - 1 : 23;
   scheduleTime(
     eveningH,

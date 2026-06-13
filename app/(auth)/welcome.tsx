@@ -1,117 +1,183 @@
-import React from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Alert, TextInput, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { COLORS, TYPOGRAPHY } from '../../src/constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, TYPOGRAPHY, SHADOWS } from '../../src/constants/theme';
 import { Button } from '../../src/components/ui/Button';
-import { signInWithGoogle } from '../../src/supabase/oauth';
+import { FloatingCard } from '../../src/components/ui/FloatingCard';
+import { supabase } from '../../src/supabase/client';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
 
-  const handleGoogleSignIn = async () => {
+  const handleAuth = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter your email and password');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const session = await signInWithGoogle();
-      if (session) {
-        router.replace('/(tabs)');
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+          Alert.alert('Registration Failed', error.message);
+        } else {
+          router.replace('/(auth)/onboarding');
+        }
       } else {
-        Alert.alert('Sign in failed', 'Please try again');
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          Alert.alert('Sign in failed', error.message);
+        } else if (data.session) {
+          router.replace('/(tabs)');
+        }
       }
     } catch (e: any) {
-      Alert.alert('Sign in failed', e.message || 'Please try again');
+      Alert.alert('Error', e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleEmailSignIn = () => {
-    // Placeholder
-  };
-
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.orb} />
-        
-        <View style={styles.branding}>
-          <Text style={styles.title}>GrindMind</Text>
-          <View style={styles.divider} />
-          <Text style={styles.subtitle}>No excuses. Only execution.</Text>
-        </View>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={[COLORS.txt, COLORS.darkEmerald]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.gradientBg}
+      >
+        <SafeAreaView style={{ flex: 1 }}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.content}
+          >
+            <View style={styles.branding}>
+              <Text style={styles.title}>GrindMind</Text>
+              <Text style={styles.subtitle}>No excuses. Only execution.</Text>
+            </View>
 
-        <View style={styles.actions}>
-          <Button
-            title="Continue with Google"
-            onPress={handleGoogleSignIn}
-            style={styles.googleBtn}
-            textStyle={{ color: COLORS.bg }}
-          />
-          <Button
-            title="Sign in with email"
-            variant="outline-dark"
-            onPress={handleEmailSignIn}
-          />
-        </View>
+            <FloatingCard style={styles.authCard}>
+              <Text style={styles.cardTitle}>{isSignUp ? "Create an account" : "Welcome back"}</Text>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="you@example.com"
+                  placeholderTextColor={COLORS.txt2}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  value={email}
+                  onChangeText={setEmail}
+                />
+              </View>
 
-        <View style={styles.gradientOrb} />
-      </View>
-    </SafeAreaView>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Password</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="••••••••"
+                  placeholderTextColor={COLORS.txt2}
+                  secureTextEntry
+                  value={password}
+                  onChangeText={setPassword}
+                />
+              </View>
+              
+              <Button
+                title={isSignUp ? "Sign Up" : "Sign In"}
+                loading={loading}
+                onPress={handleAuth}
+                style={styles.loginBtn}
+              />
+
+              <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={styles.toggleContainer} activeOpacity={0.7}>
+                <Text style={styles.toggleText}>
+                  {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
+                </Text>
+              </TouchableOpacity>
+            </FloatingCard>
+
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.bg,
+  },
+  gradientBg: {
+    flex: 1,
   },
   content: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
   branding: {
     alignItems: 'center',
-    marginBottom: 60,
-    zIndex: 1,
+    marginBottom: 40,
   },
   title: {
     ...TYPOGRAPHY.display,
     fontSize: 42,
-  },
-  divider: {
-    width: 60,
-    height: 2,
-    backgroundColor: COLORS.grn,
-    marginVertical: 8,
+    color: COLORS.white,
+    letterSpacing: -1,
   },
   subtitle: {
-    ...TYPOGRAPHY.caption,
+    ...TYPOGRAPHY.body,
+    color: COLORS.lightMint,
+    marginTop: 8,
     letterSpacing: 1,
   },
-  actions: {
-    width: '100%',
-    gap: 16,
-    zIndex: 1,
+  authCard: {
+    padding: 32,
+    ...SHADOWS.active,
   },
-  googleBtn: {
+  cardTitle: {
+    ...TYPOGRAPHY.h1,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.txt2,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  input: {
+    height: 52,
+    backgroundColor: COLORS.bg,
+    borderWidth: 1,
+    borderColor: COLORS.border2,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    ...TYPOGRAPHY.body,
+  },
+  loginBtn: {
+    marginTop: 16,
     backgroundColor: COLORS.txt,
   },
-  orb: {
-    position: 'absolute',
-    width: 250,
-    height: 250,
-    backgroundColor: COLORS.grnPill,
-    borderRadius: 125,
-    top: 100,
-    zIndex: 0,
-    opacity: 0.5,
+  toggleContainer: {
+    marginTop: 24,
+    alignItems: 'center',
   },
-  gradientOrb: {
-    position: 'absolute',
-    width: '100%',
-    height: 150,
-    backgroundColor: COLORS.grnLo,
-    bottom: 0,
-    zIndex: 0,
-    opacity: 0.3,
+  toggleText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.txt2,
   },
 });

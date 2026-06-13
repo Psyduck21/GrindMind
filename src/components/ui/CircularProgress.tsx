@@ -12,14 +12,20 @@ interface CircularProgressProps {
   strokeWidth?: number;
   label?: string;
   subLabel?: string;
+  color?: string;
+  trackColor?: string;
+  textColor?: string;
 }
 
 export function CircularProgress({
   progress,
   size = 120,
-  strokeWidth = 10,
+  strokeWidth = 12,
   label,
   subLabel,
+  color = COLORS.white,
+  trackColor = 'rgba(255,255,255,0.2)',
+  textColor = COLORS.white,
 }: CircularProgressProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
@@ -46,7 +52,7 @@ export function CircularProgress({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={COLORS.border}
+          stroke={trackColor}
           strokeWidth={strokeWidth}
           fill="none"
         />
@@ -54,7 +60,7 @@ export function CircularProgress({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={COLORS.grn}
+          stroke={color}
           strokeWidth={strokeWidth}
           strokeDasharray={circumference}
           animatedProps={animatedProps}
@@ -63,8 +69,8 @@ export function CircularProgress({
         />
       </Svg>
       <View style={styles.textContainer}>
-        {label && <Text style={styles.label}>{label}</Text>}
-        {subLabel && <Text style={styles.subLabel}>{subLabel}</Text>}
+        {label && <Text style={[styles.label, { color: textColor }]}>{label}</Text>}
+        {subLabel && <Text style={[styles.subLabel, { color: textColor }]}>{subLabel}</Text>}
       </View>
     </View>
   );
@@ -79,10 +85,11 @@ const styles = StyleSheet.create({
   label: {
     ...TYPOGRAPHY.display,
     fontSize: 24,
-    lineHeight: 28,
+    lineHeight: 32,
+    marginBottom: -4,
   },
   subLabel: {
-    ...TYPOGRAPHY.small,
-    marginTop: 2,
+    ...TYPOGRAPHY.caption,
+    opacity: 0.8,
   },
 });
