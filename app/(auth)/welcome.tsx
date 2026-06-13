@@ -30,7 +30,8 @@ export default function WelcomeScreen() {
     setLoadingMsg(isSignUp ? 'Creating account...' : 'Signing in...');
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        console.log(`[Welcome] signUp email=${email} data=`, data?.user?.id, `error=`, error);
         if (error) {
           setErrorMsg(error.message);
         } else {
@@ -38,6 +39,7 @@ export default function WelcomeScreen() {
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        console.log(`[Welcome] signInWithPassword email=${email} data=`, data?.user?.id, `error=`, error);
         if (error) {
           setErrorMsg(error.message);
         } else if (data.session) {
@@ -45,6 +47,7 @@ export default function WelcomeScreen() {
           await runFullSync();
 
           const user = db.getFirstSync('SELECT id FROM users LIMIT 1');
+          console.log(`[Welcome] First local user after sync:`, user);
           if (!user) {
             router.replace('/(auth)/onboarding');
           } else {

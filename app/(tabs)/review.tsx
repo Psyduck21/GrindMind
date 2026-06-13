@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -8,6 +8,7 @@ import { Button } from '../../src/components/ui/Button';
 import { FloatingCard } from '../../src/components/ui/FloatingCard';
 import { useUser, useAllActiveRoutines, useWeeklyReport } from '../../src/hooks/useQueries';
 import { generateWeeklyReport } from '../../src/services/behavior/weeklyReportGenerator';
+import { useAlert } from '../../src/components/ui/AlertProvider';
 
 export default function ReviewScreen() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function ReviewScreen() {
   const routine = routines?.[0];
   const { data: report, isLoading: reportLoading } = useWeeklyReport(user?.id);
   const [isGenerating, setIsGenerating] = useState(false);
+  const { showAlert } = useAlert();
 
   const handleGenerate = () => {
     if (!user?.id || !routine?.id) return;
@@ -25,14 +27,14 @@ export default function ReviewScreen() {
       generateWeeklyReport(user.id, routine.id);
       queryClient.invalidateQueries({ queryKey: ['weekly_report'] });
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      showAlert('Error', e.message);
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleRebuild = () => {
-    Alert.alert(
+    showAlert(
       'Rebuild Routine',
       'This will archive your current routine and walk you through generating a new one. Are you sure?',
       [
@@ -54,7 +56,14 @@ export default function ReviewScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Weekly Review</Text>
+          <View>
+            <Text style={styles.title}>Weekly Review</Text>
+            {report && (
+              <Text style={[styles.dateRange, { marginBottom: 0, marginTop: 4 }]}>
+                {new Date(report.weekStart).toLocaleDateString()} – {new Date(report.weekEnd).toLocaleDateString()}
+              </Text>
+            )}
+          </View>
           <Button 
             title={report ? "Refresh" : "Run Analysis"} 
             onPress={handleGenerate} 
@@ -70,10 +79,6 @@ export default function ReviewScreen() {
           </FloatingCard>
         ) : (
           <View>
-            <Text style={styles.dateRange}>
-              Week of {new Date(report.weekStart).toLocaleDateString()} – {new Date(report.weekEnd).toLocaleDateString()}
-            </Text>
-
             {/* ─── Stats ─── */}
             <View style={styles.statsGrid}>
               <StatCard label="Consistency" value={`${report.consistencyScore}%`} />

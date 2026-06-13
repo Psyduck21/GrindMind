@@ -5,12 +5,12 @@ import NetInfo from '@react-native-community/netinfo';
 
 export const SYNCABLE_TABLES = [
   'users',
+  'routines',
+  'routine_weeks',
   'tasks',
   'subtasks',
-  'routine_weeks',
-  'task_completions',
   'recovery_tasks',
-  'routines'
+  'task_completions'
 ];
 
 type OperationType = 'INSERT' | 'UPDATE' | 'DELETE';
@@ -60,11 +60,13 @@ export async function pushSync() {
         const { error } = await supabase.from(item.table_name).insert(payload);
         if (!error || error.code === '23505') success = true; // 23505 = unique constraint violation (already exists)
         else console.error(`Push Insert Error (${item.table_name}):`, error);
+        console.log(`[SyncEngine] Push Insert ${item.table_name}: success=${success}`, payload);
       } 
       else if (item.operation === 'UPDATE') {
         const { error } = await supabase.from(item.table_name).update(payload).eq('id', payload.id);
         if (!error) success = true;
         else console.error(`Push Update Error (${item.table_name}):`, error);
+        console.log(`[SyncEngine] Push Update ${item.table_name}: success=${success}`, payload);
       } 
       else if (item.operation === 'DELETE') {
         const { error } = await supabase.from(item.table_name).delete().eq('id', payload.id);
@@ -110,6 +112,7 @@ export async function pullSync() {
         console.error(`Pull sync error for ${table}:`, error);
         continue;
       }
+      console.log(`[SyncEngine] Pull sync ${table} gt ${lastSynced}: ${data?.length || 0} records found`);
 
       if (data && data.length > 0) {
         const sample = data[0];

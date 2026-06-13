@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useAlert } from '../src/components/ui/AlertProvider';
 import { Button } from '../src/components/ui/Button';
 import { Input } from '../src/components/ui/Input';
 import { FloatingCard } from '../src/components/ui/FloatingCard';
-import { saveGeneratedRoutine } from '../src/db/repositories/routine';
+import { buildRoutinePayload } from '../src/db/repositories/routine';
+import { pullSync } from '../src/services/sync/syncEngine';
 import { parseMarkdownRoutine } from '../src/services/routineParser';
 import { supabase } from '../src/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -17,6 +19,7 @@ export default function ImportRoutineScreen() {
   const [markdown, setMarkdown] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const queryClient = useQueryClient();
+  const { showAlert } = useAlert();
 
   const promptText = `I want you to act as an expert life coach and planner. I need a new 4-week routine.
 
@@ -41,7 +44,7 @@ Goal: [Routine Goal]
 
   const handleSubmit = async () => {
     if (!markdown.trim()) {
-      Alert.alert('Error', 'Please paste the generated markdown.');
+      showAlert('Error', 'Please paste the generated markdown.');
       return;
     }
     
@@ -53,13 +56,30 @@ Goal: [Routine Goal]
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData?.session ?? null;
       if (!session) {
-        Alert.alert('Sign-in required', 'Please sign in again');
+        showAlert('Sign-in required', 'Please sign in again');
         router.replace('/(auth)/welcome');
         return;
       }
       
       const userId = session.user.id;
-      const routineId = saveGeneratedRoutine(userId, generated);
+      console.log(`[ImportRoutine] Starting buildRoutinePayload for user=${userId}...`);
+      const { routineId, routine_payload, tasks_payload, subtasks_payload } = buildRoutinePayload(userId, generated);
+
+      console.log(`[ImportRoutine] Calling RPC insert_full_routine...`);
+      const { error: rpcError } = await supabase.rpc('insert_full_routine', {
+        routine_payload,
+        tasks_payload,
+        subtasks_payload
+      });
+
+      if (rpcError) {
+        throw new Error('Cloud sync failed: ' + rpcError.message);
+      }
+
+      console.log(`[ImportRoutine] RPC successful. Pulling to local DB...`);
+      await pullSync();
+      
+      console.log(`[ImportRoutine] Routine imported successfully, id=${routineId}`);
       
       queryClient.invalidateQueries({ queryKey: ['routine', userId] });
       queryClient.invalidateQueries({ queryKey: ['routines', userId] });
@@ -71,7 +91,7 @@ Goal: [Routine Goal]
       router.back();
     } catch (e: any) {
       setIsLoading(false);
-      Alert.alert('Parsing Error', e.message || 'Failed to parse the markdown. Check the format.');
+      showAlert('Parsing Error', e.message || 'Failed to parse the markdown. Check the format.');
     }
   };
 

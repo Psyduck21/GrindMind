@@ -30,15 +30,15 @@ export default function RoutinesHubScreen() {
 
         <View style={styles.grid}>
           {routines && routines.map((r: any) => (
-            <TouchableOpacity 
-              key={r.id} 
+            <TouchableOpacity
+              key={r.id}
               style={styles.routineCard}
               activeOpacity={0.8}
               onPress={() => router.push({ pathname: '/(tabs)/routine/[id]', params: { id: r.id } })}
             >
               <View style={styles.cardHeader}>
-                <Text style={styles.routineTag}>{r.routine_type || '🗓️'}</Text>
-                <Text style={styles.routineTitle}>{r.title}</Text>
+                <Text style={styles.routineTag} numberOfLines={1}>{r.routine_type || '🗓️'}</Text>
+                <Text style={styles.routineTitle} numberOfLines={2}>{r.title}</Text>
               </View>
               <Text style={styles.routineGoal} numberOfLines={2}>{r.goal}</Text>
               <View style={styles.cardFooter}>
@@ -46,8 +46,8 @@ export default function RoutinesHubScreen() {
               </View>
             </TouchableOpacity>
           ))}
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.addCard}
             activeOpacity={0.8}
             onPress={() => router.push('/import-routine')}
@@ -86,7 +86,6 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.display,
     fontSize: 36,
     color: COLORS.txt,
-    marginBottom: 8,
   },
   subtitle: {
     ...TYPOGRAPHY.body,
@@ -116,6 +115,8 @@ const styles = StyleSheet.create({
   routineTag: {
     fontSize: 28,
     marginRight: 12,
+    flexShrink: 1,
+    maxWidth: '30%',
   },
   routineTitle: {
     ...TYPOGRAPHY.h2,

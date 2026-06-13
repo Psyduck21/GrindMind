@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useOnboardingStore } from '../../src/stores/useOnboardingStore';
@@ -8,15 +8,18 @@ import { Button } from '../../src/components/ui/Button';
 import { Input } from '../../src/components/ui/Input';
 import { supabase } from '../../src/supabase/client';
 import { db } from '../../src/db/db';
+import { pullSync } from '../../src/services/sync/syncEngine';
+import { useAlert } from '../../src/components/ui/AlertProvider';
 
 export default function OnboardingScreen() {
   const router = useRouter();
   const { data, updateData } = useOnboardingStore();
   const [loading, setLoading] = useState(false);
+  const { showAlert } = useAlert();
 
   const finalizeOnboarding = async () => {
     if (!data.name?.trim()) {
-      Alert.alert('Required', 'Please enter your name');
+      showAlert('Required', 'Please enter your name');
       return;
     }
 
@@ -25,12 +28,13 @@ export default function OnboardingScreen() {
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData?.session ?? null;
       if (!session) {
-        Alert.alert('Sign-in required', 'Please sign in with Google before continuing.');
+        showAlert('Sign-in required', 'Please sign in with Google before continuing.');
         router.replace('/(auth)/welcome');
         return;
       }
 
       const newUserId = session.user.id;
+      console.log(`[Onboarding] Finalize: userId=${newUserId}, data.name=${data.name}`);
 
       // Fallback defaults for skipped setup steps
       const grindType = 'custom';
@@ -39,33 +43,43 @@ export default function OnboardingScreen() {
       const sleepTime = '23:00';
       const accountabilityMode = data.accountabilityMode || 'coach';
 
-      db.runSync(
-        `INSERT OR REPLACE INTO users (id, name, primary_goal, available_daily_minutes, wake_time, sleep_time, accountability_mode, created_at, updated_at) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          newUserId,
-          data.name.trim(),
-          grindType,
-          dailyMinutes,
-          wakeTime,
-          sleepTime,
-          accountabilityMode,
-          Date.now(),
-          Date.now(),
-        ]
-      );
-      
+      const updatePayload = {
+        name: data.name.trim(),
+        primary_goal: grindType,
+        available_daily_minutes: dailyMinutes,
+        wake_time: wakeTime,
+        sleep_time: sleepTime,
+        accountability_mode: accountabilityMode,
+        updated_at: Date.now()
+      };
+
+      // Save directly to cloud first
+      const { data: updateData, error } = await supabase
+        .from('users')
+        .update(updatePayload)
+        .eq('id', newUserId)
+        .select();
+
+      console.log(`[Onboarding] Supabase update result for ${newUserId}:`, { updateData, error });
+
+      if (error) {
+        throw new Error('Failed to save profile to the cloud: ' + error.message);
+      }
+
+      // Then pull to local db
+      await pullSync();
+
       // Skip task generation and go straight to dashboard
       router.push('/(tabs)');
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Something went wrong');
+      showAlert('Error', e.message || 'Something went wrong');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         
         <View style={styles.stepContainer}>
@@ -181,10 +195,10 @@ const styles = StyleSheet.create({
   },
   footer: {
     flexDirection: 'row',
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     borderTopWidth: 1,
     borderTopColor: COLORS.border2,
-    backgroundColor: COLORS.white,
-    ...SHADOWS.floating,
+    backgroundColor: COLORS.bg,
   },
 });

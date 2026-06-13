@@ -29,7 +29,7 @@ export const parseMarkdownRoutine = (markdown: string): GeneratedRoutine => {
     }
     // Tag / Category
     else if (line.toLowerCase().startsWith('tag:')) {
-      routine_type = line.substring(4).trim();
+      routine_type = line.substring(4).replace(/^\[|\]$/g, '').trim();
     }
     // Routine Goal
     else if (line.toLowerCase().startsWith('goal:')) {
@@ -94,15 +94,23 @@ export const parseMarkdownRoutine = (markdown: string): GeneratedRoutine => {
 
   pushCurrentTask();
 
+  const sanitizeStr = (s: string) => s.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+
   if (!title) title = 'Custom Routine';
   if (!goal) goal = 'Follow the plan to achieve your goals.';
 
   return {
     routine: {
-      title,
-      goal,
-      routine_type: routine_type || 'General',
+      title: sanitizeStr(title),
+      goal: sanitizeStr(goal),
+      routine_type: sanitizeStr(routine_type) || 'General',
     },
-    tasks,
+    tasks: tasks.map(t => ({
+      ...t,
+      title: sanitizeStr(t.title),
+      description: sanitizeStr(t.description || ''),
+      category: sanitizeStr(t.category || ''),
+      subtasks: t.subtasks?.map(sanitizeStr) || []
+    })),
   };
 };

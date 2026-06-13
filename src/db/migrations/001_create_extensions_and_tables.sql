@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TABLE IF NOT EXISTS public.users (
   id TEXT PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   name TEXT NOT NULL,
-  age_range TEXT,
+  age INTEGER,
   primary_goal TEXT,
   secondary_goal TEXT,
   available_daily_minutes INTEGER,

@@ -2,14 +2,14 @@ import { db } from './db';
 
 export const setupDatabase = () => {
   // Try to alter existing tasks table to add new columns, ignore errors if they exist
-  try { db.execSync('ALTER TABLE tasks ADD COLUMN target_week INTEGER DEFAULT 1;'); } catch (e) {}
-  try { db.execSync('ALTER TABLE tasks ADD COLUMN target_day TEXT DEFAULT "Monday";'); } catch (e) {}
+  try { db.execSync('ALTER TABLE tasks ADD COLUMN target_week INTEGER DEFAULT 1;'); } catch (e) { }
+  try { db.execSync('ALTER TABLE tasks ADD COLUMN target_day TEXT DEFAULT "Monday";'); } catch (e) { }
 
   db.execSync(`
     CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
+      id UUID PRIMARY KEY,
       name TEXT NOT NULL,
-      age_range TEXT,
+      age INTEGER,
       primary_goal TEXT,
       secondary_goal TEXT,
       available_daily_minutes INTEGER,
@@ -25,8 +25,8 @@ export const setupDatabase = () => {
     );
 
     CREATE TABLE IF NOT EXISTS routines (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id),
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id),
       title TEXT NOT NULL,
       goal TEXT NOT NULL,
       version INTEGER DEFAULT 1,
@@ -38,8 +38,8 @@ export const setupDatabase = () => {
     );
 
     CREATE TABLE IF NOT EXISTS routine_weeks (
-      id TEXT PRIMARY KEY,
-      routine_id TEXT NOT NULL REFERENCES routines(id),
+      id UUID PRIMARY KEY,
+      routine_id UUID NOT NULL REFERENCES routines(id),
       week_number INTEGER NOT NULL,
       is_completed INTEGER DEFAULT 0,
       completed_at INTEGER,
@@ -49,8 +49,8 @@ export const setupDatabase = () => {
     );
 
     CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY,
-      routine_id TEXT NOT NULL REFERENCES routines(id),
+      id UUID PRIMARY KEY,
+      routine_id UUID NOT NULL REFERENCES routines(id),
       title TEXT NOT NULL,
       description TEXT,
       priority TEXT DEFAULT 'medium',
@@ -70,16 +70,16 @@ export const setupDatabase = () => {
     );
 
     CREATE TABLE IF NOT EXISTS subtasks (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL REFERENCES tasks(id),
+      id UUID PRIMARY KEY,
+      task_id UUID NOT NULL REFERENCES tasks(id),
       title TEXT NOT NULL,
       is_completed INTEGER DEFAULT 0,
       created_at INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS habits (
-      id TEXT PRIMARY KEY,
-      routine_id TEXT NOT NULL REFERENCES routines(id),
+      id UUID PRIMARY KEY,
+      routine_id UUID NOT NULL REFERENCES routines(id),
       title TEXT NOT NULL,
       recurrence_rule TEXT NOT NULL,
       streak_count INTEGER DEFAULT 0,
@@ -91,9 +91,9 @@ export const setupDatabase = () => {
     );
 
     CREATE TABLE IF NOT EXISTS task_completions (
-      id TEXT PRIMARY KEY,
-      task_id TEXT NOT NULL REFERENCES tasks(id),
-      user_id TEXT NOT NULL REFERENCES users(id),
+      id UUID PRIMARY KEY,
+      task_id UUID NOT NULL REFERENCES tasks(id),
+      user_id UUID NOT NULL REFERENCES users(id),
       date TEXT NOT NULL,
       completed_at INTEGER,
       skip_reason TEXT,
@@ -104,9 +104,9 @@ export const setupDatabase = () => {
     );
 
     CREATE TABLE IF NOT EXISTS recovery_tasks (
-      id TEXT PRIMARY KEY,
-      source_task_id TEXT NOT NULL REFERENCES tasks(id),
-      user_id TEXT NOT NULL REFERENCES users(id),
+      id UUID PRIMARY KEY,
+      source_task_id UUID NOT NULL REFERENCES tasks(id),
+      user_id UUID NOT NULL REFERENCES users(id),
       title TEXT NOT NULL,
       description TEXT,
       scheduled_date TEXT NOT NULL,
@@ -117,8 +117,8 @@ export const setupDatabase = () => {
     );
 
     CREATE TABLE IF NOT EXISTS weekly_reports (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id),
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id),
       week_start TEXT NOT NULL,
       week_end TEXT NOT NULL,
       tasks_completed INTEGER DEFAULT 0,
@@ -134,8 +134,8 @@ export const setupDatabase = () => {
     );
 
     CREATE TABLE IF NOT EXISTS notifications (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id),
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id),
       type TEXT NOT NULL,
       message TEXT NOT NULL,
       scheduled_at INTEGER NOT NULL,
@@ -145,24 +145,24 @@ export const setupDatabase = () => {
     );
 
     CREATE TABLE IF NOT EXISTS achievements (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id),
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id),
       badge_name TEXT NOT NULL,
       achieved_at INTEGER NOT NULL,
       xp_awarded INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS analytics_events (
-      id TEXT PRIMARY KEY,
-      user_id TEXT,
+      id UUID PRIMARY KEY,
+      user_id UUID,
       event_name TEXT NOT NULL,
       properties TEXT,
       created_at INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS routine_versions (
-      id TEXT PRIMARY KEY,
-      routine_id TEXT NOT NULL REFERENCES routines(id),
+      id UUID PRIMARY KEY,
+      routine_id UUID NOT NULL REFERENCES routines(id),
       version INTEGER NOT NULL,
       snapshot TEXT NOT NULL,
       reason TEXT,
@@ -170,7 +170,7 @@ export const setupDatabase = () => {
     );
 
     CREATE TABLE IF NOT EXISTS sync_queue (
-      id TEXT PRIMARY KEY,
+      id UUID PRIMARY KEY,
       table_name TEXT NOT NULL,
       operation TEXT NOT NULL,
       payload TEXT NOT NULL,
@@ -178,7 +178,7 @@ export const setupDatabase = () => {
     );
 
     CREATE TABLE IF NOT EXISTS sync_state (
-      id TEXT PRIMARY KEY,
+      id UUID PRIMARY KEY,
       last_synced_at INTEGER NOT NULL
     );
   `);

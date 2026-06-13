@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   },
   subtaskRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: 4,
   },
   subtaskCheckbox: {
@@ -229,6 +229,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 2,
   },
   subtaskCheckboxDone: {
     backgroundColor: COLORS.txt,
@@ -239,6 +240,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.txt2,
     flex: 1,
+    lineHeight: 20,
   },
   subtaskTitleDone: {
     textDecorationLine: 'line-through',

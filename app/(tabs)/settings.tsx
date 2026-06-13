@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Menu } from 'lucide-react-native';
 import { db } from '../../src/db/db';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../../src/constants/theme';
 import { FloatingCard } from '../../src/components/ui/FloatingCard';
@@ -12,13 +13,15 @@ import { getAchievements } from '../../src/services/gamification/badgeEngine';
 import { getLevelInfo } from '../../src/constants/xpConfig';
 import { BADGE_DEFINITIONS } from '../../src/constants/badgeDefinitions';
 import { supabase } from '../../src/supabase/client';
-import { useUser, useWeeklyCompletions } from '../../src/hooks/useQueries';
+import { useWeeklyCompletions, useUser } from '../../src/hooks/useQueries';
 import { AnimatedLineChart } from '../../src/components/profile/AnimatedLineChart';
+import { useAlert } from '../../src/components/ui/AlertProvider';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { data: user } = useUser();
   const { data: weeklyCompletions } = useWeeklyCompletions(user?.id);
+  const { showAlert } = useAlert();
 
   const stats = useMemo(() => {
     if (!user?.id) return null;
@@ -39,7 +42,7 @@ export default function ProfileScreen() {
   }, [user?.id]);
 
   const handleSignOut = async () => {
-    Alert.alert('Sign Out', 'Are you sure?', [
+    showAlert('Sign Out', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign Out', style: 'destructive', onPress: () => supabase.auth.signOut() },
     ]);
@@ -59,6 +62,13 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
+        {/* ─── Top Bar ─── */}
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => router.push('/preferences')} style={styles.settingsBtn} activeOpacity={0.7}>
+            <Menu color={COLORS.txt} size={28} />
+          </TouchableOpacity>
+        </View>
+
         {/* ─── Premium Header ─── */}
         <View style={styles.profileHeader}>
           <Text style={styles.nameHeading}>{user.name}</Text>
@@ -66,7 +76,6 @@ export default function ProfileScreen() {
             <Text style={styles.modeText}>{modeLabel[user.accountability_mode] || user.accountability_mode}</Text>
           </View>
         </View>
-
         {/* ─── Animated Analytics Chart ─── */}
         <AnimatedLineChart data={weeklyCompletions || []} />
 
@@ -105,7 +114,7 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   key={def.id}
                   style={[styles.badgeCard, !earned && styles.badgeCardLocked]}
-                  onPress={() => Alert.alert(
+                  onPress={() => showAlert(
                     earned ? `${def.icon} ${def.name}` : '🔒 Locked',
                     earned ? def.description : `Unlock condition: ${def.description}`
                   )}
@@ -126,13 +135,6 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* ─── Settings & Account ─── */}
-        <View style={styles.section}>
-          <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut} activeOpacity={0.8}>
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -151,10 +153,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   scroll: { padding: 24, paddingBottom: 100 },
 
+  topBar: {
+    alignItems: 'flex-end',
+    marginBottom: -10,
+    zIndex: 10,
+  },
+  settingsBtn: {
+    padding: 8,
+  },
   profileHeader: {
     marginBottom: 32,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 0,
   },
   nameHeading: {
     ...TYPOGRAPHY.display,
@@ -256,14 +266,4 @@ const styles = StyleSheet.create({
     color: COLORS.txt,
   },
 
-  signOutBtn: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 71, 87, 0.2)',
-    ...SHADOWS.floating,
-  },
-  signOutText: { ...TYPOGRAPHY.button, color: COLORS.danger },
 });

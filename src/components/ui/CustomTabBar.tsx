@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Dimensions, Platform } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, TouchableOpacity, StyleSheet, Dimensions, Platform, Animated, Easing } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import Svg, { Path, Defs, Filter, FeDropShadow } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
@@ -22,6 +22,49 @@ const getIcon = (name: string, color: string) => {
   }
 };
 
+function TabItemButton({ route, index, isFocused, navigation, color }: any) {
+  const scale = useRef(new Animated.Value(isFocused ? 1.2 : 1)).current;
+
+  useEffect(() => {
+    Animated.timing(scale, {
+      toValue: isFocused ? 1.2 : 1,
+      duration: 250,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  }, [isFocused]);
+
+  const onPress = () => {
+    const event = navigation.emit({
+      type: 'tabPress',
+      target: route.key,
+      canPreventDefault: true,
+    });
+
+    if (!isFocused && !event.defaultPrevented) {
+      navigation.navigate(route.name);
+    }
+  };
+
+  return (
+    <React.Fragment>
+      {index === 2 && <View style={styles.spacer} />}
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityState={isFocused ? { selected: true } : {}}
+        onPress={onPress}
+        style={styles.tabItem}
+        activeOpacity={0.7}
+      >
+        <Animated.View style={{ transform: [{ scale }], alignItems: 'center' }}>
+          {getIcon(route.name, color)}
+          <View style={[styles.dot, { backgroundColor: isFocused ? COLORS.txt : 'transparent' }]} />
+        </Animated.View>
+      </TouchableOpacity>
+    </React.Fragment>
+  );
+}
+
 export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -29,7 +72,6 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   const TAB_BAR_WIDTH = width;
   const TAB_BAR_HEIGHT = 64;
   const TOTAL_HEIGHT = TAB_BAR_HEIGHT + insets.bottom;
-  const cx = TAB_BAR_WIDTH / 2;
 
   // Normal full-width flat bar
   const getTabPath = () => {
@@ -87,36 +129,18 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
         <View style={[styles.content, { height: TAB_BAR_HEIGHT }]} pointerEvents="box-none">
           {state.routes.map((route, index) => {
             if (['index', 'routine', 'review', 'settings'].indexOf(route.name) === -1) return null;
-
             const isFocused = state.index === index;
             const color = isFocused ? COLORS.txt : COLORS.txt2;
 
-            const onPress = () => {
-              const event = navigation.emit({
-                type: 'tabPress',
-                target: route.key,
-                canPreventDefault: true,
-              });
-
-              if (!isFocused && !event.defaultPrevented) {
-                navigation.navigate(route.name);
-              }
-            };
-
             return (
-              <React.Fragment key={route.key}>
-                {index === 2 && <View style={styles.spacer} />}
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityState={isFocused ? { selected: true } : {}}
-                  onPress={onPress}
-                  style={styles.tabItem}
-                  activeOpacity={0.7}
-                >
-                  {getIcon(route.name, color)}
-                  <View style={[styles.dot, { backgroundColor: isFocused ? COLORS.txt : 'transparent' }]} />
-                </TouchableOpacity>
-              </React.Fragment>
+              <TabItemButton
+                key={route.key}
+                route={route}
+                index={index}
+                isFocused={isFocused}
+                navigation={navigation}
+                color={color}
+              />
             );
           })}
         </View>

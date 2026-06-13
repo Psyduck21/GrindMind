@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, Alert, ActivityIndicator, Modal, TextInput,
+  TouchableOpacity, ActivityIndicator, Modal, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -10,6 +10,7 @@ import { db } from '../../src/db/db';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../../src/constants/theme';
 import { Button } from '../../src/components/ui/Button';
 import { FloatingCard } from '../../src/components/ui/FloatingCard';
+import { useAlert } from '../../src/components/ui/AlertProvider';
 import { processTaskMiss } from '../../src/services/consequence/consequenceEngine';
 import { getXpForTask } from '../../src/services/scoring/streakCalculator';
 import { checkAndAwardBadges } from '../../src/services/gamification/badgeEngine';
@@ -34,6 +35,7 @@ export default function TaskDetailScreen() {
   const [selectedReason, setSelectedReason] = useState('');
   const [customReason, setCustomReason] = useState('');
   const [loading, setLoading] = useState(false);
+  const { showAlert } = useAlert();
 
   const { data: task, isLoading } = useQuery({
     queryKey: ['task', id],
@@ -115,9 +117,9 @@ export default function TaskDetailScreen() {
         ? `\n\n🏅 Badge unlocked: ${unlocked.join(', ')}!`
         : '';
 
-      Alert.alert('Done! ✅', `+${xp} XP earned. Keep grinding.${badgeMsg}`, [{ text: 'OK', onPress: () => router.back() }]);
+      showAlert('Done! ✅', `+${xp} XP earned. Keep grinding.${badgeMsg}`, [{ text: 'OK', onPress: () => router.back() }]);
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      showAlert('Error', e.message);
     } finally {
       setLoading(false);
     }
@@ -126,7 +128,7 @@ export default function TaskDetailScreen() {
   const handleSkipConfirm = () => {
     const reason = selectedReason === 'Other' ? customReason : selectedReason;
     if (!reason.trim()) {
-      Alert.alert('Required', 'Please select or enter a reason');
+      showAlert('Required', 'Please select or enter a reason');
       return;
     }
     // Optimistic updates
