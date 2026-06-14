@@ -131,11 +131,11 @@ export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
       content: {
         title: 'GrindMind',
         body: message,
-        data: { type: 'daily', userId: opts.userId },
+        data: { type: 'daily', userId: String(opts.userId) },
       },
       trigger: {
-        date: trigger,
         type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: trigger,
       },
     });
 
@@ -220,11 +220,11 @@ export const scheduleTaskReminder = async (
     content: {
       title: 'GrindMind',
       body,
-      data: { type: 'task_reminder', taskId: task.id, userId },
+      data: { type: 'task_reminder', taskId: String(task.id), userId: String(userId) },
     },
     trigger: {
-      date: trigger,
       type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: trigger,
     },
   });
 

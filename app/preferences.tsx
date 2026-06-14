@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as IntentLauncher from 'expo-intent-launcher';
+import * as Application from 'expo-application';
 import { Input } from '../src/components/ui/Input';
 import { Button } from '../src/components/ui/Button';
 import { FloatingCard } from '../src/components/ui/FloatingCard';
@@ -189,12 +191,25 @@ export default function PreferencesScreen() {
         {/* Notification Settings */}
         <TouchableOpacity 
           style={styles.notificationBtn} 
-          onPress={() => Linking.openSettings()} 
+          onPress={() => {
+            if (Platform.OS === 'android') {
+              IntentLauncher.startActivityAsync(
+                IntentLauncher.ActivityAction.APP_NOTIFICATION_SETTINGS,
+                {
+                  extra: {
+                    'android.provider.extra.APP_PACKAGE': Application.applicationId || 'com.akshatprj.grindmind',
+                  },
+                }
+              );
+            } else {
+              Linking.openSettings();
+            }
+          }} 
           activeOpacity={0.8}
         >
           <View>
             <Text style={styles.notificationText}>Change Notification Sound</Text>
-            <Text style={styles.notificationSubtext}>Opens Android system settings</Text>
+            <Text style={styles.notificationSubtext}>Manage audio in app settings</Text>
           </View>
           <ArrowRight color={COLORS.txt} size={20} />
         </TouchableOpacity>

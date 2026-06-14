@@ -24,10 +24,6 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.akshatprj.grindmind"
     },
-    "notification": {
-      "icon": "./assets/icon.png",
-      "color": "#0D5C4A"
-    },
     "web": {
       "favicon": "./assets/icon.png"
     },
@@ -42,7 +38,9 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#0D5C4A",
-          "sounds": ["./assets/roast.wav"]
+          "sounds": [
+            "./assets/roast.wav"
+          ]
         }
       ],
       [
