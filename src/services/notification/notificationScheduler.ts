@@ -209,11 +209,13 @@ export const scheduleTaskReminder = async (
   // Do NOT schedule for tomorrow if time already passed today
   if (trigger <= new Date()) return;
 
-  const body = `⏰ Chal shuru kar: ${task.title}`;
+  // Trick getRoastMessage into giving a completely random roast by passing an invalid context
+  const body = getRoastMessage(accountabilityMode, 'general' as any);
+  const title = `⏰ Chal shuru kar: ${task.title}`;
 
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: 'GrindMind',
+      title,
       body,
     },
     trigger: {
