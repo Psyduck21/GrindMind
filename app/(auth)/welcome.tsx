@@ -9,6 +9,7 @@ import { FloatingCard } from '../../src/components/ui/FloatingCard';
 import { supabase } from '../../src/supabase/client';
 import { runFullSync } from '../../src/services/sync/syncEngine';
 import { db } from '../../src/db/db';
+import { clearDatabase } from '../../src/db/schema';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -44,6 +45,7 @@ export default function WelcomeScreen() {
           setErrorMsg(error.message);
         } else if (data.session) {
           setLoadingMsg('Syncing your profile...');
+          clearDatabase();
           await runFullSync();
 
           const user = db.getFirstSync('SELECT id FROM users LIMIT 1');
