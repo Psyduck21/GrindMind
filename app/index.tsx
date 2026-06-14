@@ -7,6 +7,8 @@ import { COLORS } from '../src/constants/theme';
 
 import { db } from '../src/db/db';
 import { clearDatabase } from '../src/db/schema';
+import { runFullSync } from '../src/services/sync/syncEngine';
+
 export default function AuthGuard() {
   const { isInitialized, session, setSession, setInitialized } = useAuthStore();
 
@@ -25,6 +27,8 @@ export default function AuthGuard() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         clearDatabase();
+      } else if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') {
+        runFullSync().catch(console.error);
       }
       setSession(session);
     });

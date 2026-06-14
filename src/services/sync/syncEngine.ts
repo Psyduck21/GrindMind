@@ -58,20 +58,35 @@ export async function pushSync() {
     try {
       if (item.operation === 'INSERT') {
         const { error } = await supabase.from(item.table_name).insert(payload);
-        if (!error || error.code === '23505') success = true; // 23505 = unique constraint violation (already exists)
-        else console.error(`Push Insert Error (${item.table_name}):`, error);
+        if (!error || error.code === '23505') {
+          success = true; // 23505 = unique constraint violation (already exists)
+        } else if (error.code === '42501' || error.message?.includes('row-level security')) {
+          console.error(`🚨 [RLS BLOCK] Supabase blocked INSERT on ${item.table_name}. Check Row Level Security policies! Error:`, error);
+        } else {
+          console.error(`Push Insert Error (${item.table_name}):`, error);
+        }
         console.log(`[SyncEngine] Push Insert ${item.table_name}: success=${success}`, payload);
       } 
       else if (item.operation === 'UPDATE') {
         const { error } = await supabase.from(item.table_name).update(payload).eq('id', payload.id);
-        if (!error) success = true;
-        else console.error(`Push Update Error (${item.table_name}):`, error);
+        if (!error) {
+          success = true;
+        } else if (error.code === '42501' || error.message?.includes('row-level security')) {
+          console.error(`🚨 [RLS BLOCK] Supabase blocked UPDATE on ${item.table_name}. Check Row Level Security policies! Error:`, error);
+        } else {
+          console.error(`Push Update Error (${item.table_name}):`, error);
+        }
         console.log(`[SyncEngine] Push Update ${item.table_name}: success=${success}`, payload);
       } 
       else if (item.operation === 'DELETE') {
         const { error } = await supabase.from(item.table_name).delete().eq('id', payload.id);
-        if (!error) success = true;
-        else console.error(`Push Delete Error (${item.table_name}):`, error);
+        if (!error) {
+          success = true;
+        } else if (error.code === '42501' || error.message?.includes('row-level security')) {
+          console.error(`🚨 [RLS BLOCK] Supabase blocked DELETE on ${item.table_name}. Check Row Level Security policies! Error:`, error);
+        } else {
+          console.error(`Push Delete Error (${item.table_name}):`, error);
+        }
       }
 
       // If successful (or safely ignorable like a duplicate insert), remove from local queue
@@ -109,7 +124,11 @@ export async function pullSync() {
         .gt(timestampCol, lastSynced);
 
       if (error) {
-        console.error(`Pull sync error for ${table}:`, error);
+        if (error.code === '42501' || error.message?.includes('row-level security')) {
+          console.error(`🚨 [RLS BLOCK] Supabase blocked PULL (SELECT) on ${table}. Check Row Level Security policies! Error:`, error);
+        } else {
+          console.error(`Pull sync error for ${table}:`, error);
+        }
         continue;
       }
       console.log(`[SyncEngine] Pull sync ${table} gt ${lastSynced}: ${data?.length || 0} records found`);

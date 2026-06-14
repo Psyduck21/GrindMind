@@ -19,12 +19,11 @@ export const requestNotificationPermissions = async (): Promise<boolean> => {
   if (Platform.OS === 'web') return false;
 
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('grindmind_alerts', {
+    await Notifications.setNotificationChannelAsync('grindmind_alerts_3', {
       name: 'GrindMind Alerts',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#0D5C4A',
-      sound: 'roast', // Android requires omitting the extension
+      lightColor: '#0D5C4A'
     });
   }
 
@@ -130,13 +129,11 @@ export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
       content: {
         title: 'GrindMind',
         body: message,
-        data: { type: 'daily', userId: String(opts.userId) },
-        sound: Platform.OS === 'android' ? 'roast' : 'roast.wav',
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: trigger.getTime(),
-        channelId: 'grindmind_alerts',
+        date: trigger,
+        channelId: 'grindmind_alerts_3',
       },
     });
 
@@ -221,13 +218,11 @@ export const scheduleTaskReminder = async (
     content: {
       title: 'GrindMind',
       body,
-      data: { type: 'task_reminder', taskId: String(task.id), userId: String(userId) },
-      sound: Platform.OS === 'android' ? 'roast' : 'roast.wav',
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: trigger.getTime(),
-      channelId: 'grindmind_alerts',
+      date: trigger,
+      channelId: 'grindmind_alerts_3',
     },
   });
 
@@ -270,13 +265,11 @@ export const sendTestNotification = async () => {
       content: {
         title: 'GrindMind Test',
         body: 'Testing notifications. Did you hear the roast?',
-        data: { type: 'test' },
-        sound: Platform.OS === 'android' ? 'roast' : 'roast.wav',
       },
       trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: trigger.getTime(),
-        channelId: 'grindmind_alerts',
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 2,
+        channelId: 'grindmind_alerts_3',
       },
     });
     console.log('Test notification scheduled for 2 seconds from now!');
