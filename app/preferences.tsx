@@ -14,7 +14,7 @@ import { COLORS, TYPOGRAPHY, SHADOWS } from '../src/constants/theme';
 import { supabase } from '../src/supabase/client';
 import { db } from '../src/db/db';
 import { useAlert } from '../src/components/ui/AlertProvider';
-import { scheduleDailyNotifications } from '../src/services/notification/notificationScheduler';
+import { scheduleDailyNotifications, sendTestNotification } from '../src/services/notification/notificationScheduler';
 
 const MODES = [
   { id: 'friendly', label: 'Friendly' },
@@ -210,6 +210,22 @@ export default function PreferencesScreen() {
           <View>
             <Text style={styles.notificationText}>Change Notification Sound</Text>
             <Text style={styles.notificationSubtext}>Manage audio in app settings</Text>
+          </View>
+          <ArrowRight color={COLORS.txt} size={20} />
+        </TouchableOpacity>
+
+        {/* Test Notification Settings */}
+        <TouchableOpacity 
+          style={styles.notificationBtn} 
+          onPress={() => {
+             sendTestNotification();
+             showAlert('Test Sent', 'Notification scheduled for 2 seconds. You may need to minimize the app to see the system banner.');
+          }} 
+          activeOpacity={0.8}
+        >
+          <View>
+            <Text style={styles.notificationText}>Send Test Notification</Text>
+            <Text style={styles.notificationSubtext}>Verify your notification settings</Text>
           </View>
           <ArrowRight color={COLORS.txt} size={20} />
         </TouchableOpacity>

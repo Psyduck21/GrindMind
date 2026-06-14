@@ -7,7 +7,6 @@ import uuid from 'react-native-uuid';
 // ─── Configure how notifications appear when app is foregrounded ─────────────
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,
@@ -20,8 +19,8 @@ export const requestNotificationPermissions = async (): Promise<boolean> => {
   if (Platform.OS === 'web') return false;
 
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
+    await Notifications.setNotificationChannelAsync('grindmind_alerts', {
+      name: 'GrindMind Alerts',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#0D5C4A',
@@ -132,10 +131,12 @@ export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
         title: 'GrindMind',
         body: message,
         data: { type: 'daily', userId: String(opts.userId) },
+        sound: 'roast.wav',
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: trigger,
+        date: trigger.getTime(),
+        channelId: 'grindmind_alerts',
       },
     });
 
@@ -221,10 +222,12 @@ export const scheduleTaskReminder = async (
       title: 'GrindMind',
       body,
       data: { type: 'task_reminder', taskId: String(task.id), userId: String(userId) },
+      sound: 'roast.wav',
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: trigger,
+      date: trigger.getTime(),
+      channelId: 'grindmind_alerts',
     },
   });
 
@@ -247,4 +250,31 @@ const logNotification = (
   } catch {
     // Silent fail — notification logging is non-critical
   }
+};
+
+// ─── Send Test Notification ───────────────────────────────────────────────────
+export const sendTestNotification = async () => {
+  const hasPermission = await requestNotificationPermissions();
+  if (!hasPermission) {
+    console.log('No notification permissions');
+    return;
+  }
+
+  // Schedule for 2 seconds from now
+  const trigger = new Date(Date.now() + 2000);
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'GrindMind Test',
+      body: 'Testing notifications. Did you hear the roast?',
+      data: { type: 'test' },
+      sound: 'roast.wav',
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: trigger.getTime(),
+      channelId: 'grindmind_alerts',
+    },
+  });
+  console.log('Test notification scheduled for 2 seconds from now!');
 };
