@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { db } from '../../db/db';
 import { getRoastMessage, RoastIntensity } from '../../constants/roastMessages';
 import uuid from 'react-native-uuid';
+import { TicketPercent } from 'lucide-react-native';
 
 // ─── Configure how notifications appear when app is foregrounded ─────────────
 Notifications.setNotificationHandler({
@@ -42,23 +43,23 @@ export interface ScheduleOptions {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const parseTime = (timeStr: string): { hour: number; minute: number } => {
+const parseTime = (timeStr: string): { hour: number; minute: number; mins: number } => {
   const [h, m] = timeStr.split(':').map(Number);
-  return { hour: h, minute: m };
+  return { hour: h, minute: m, mins: h * 60 + m };
 };
 
 const isWithinQuietHours = (
-  hour: number,
-  wakeHour: number,
-  sleepHour: number
+  timeMins: number,
+  wakeMins: number,
+  sleepMins: number
 ): boolean => {
-  // Quiet hours = before wake or after sleep
-  if (sleepHour > wakeHour) {
+  // timeMins, wakeMins, sleepMins are minutes from 00:00 (0 - 1439)
+  if (sleepMins > wakeMins) {
     // Same day: quiet if before wake or after sleep
-    return hour < wakeHour || hour >= sleepHour;
+    return timeMins < wakeMins || timeMins >= sleepMins;
   } else {
     // Wraps midnight: quiet if after sleep AND before wake
-    return hour >= sleepHour && hour < wakeHour;
+    return timeMins >= sleepMins && timeMins < wakeMins;
   }
 };
 
@@ -110,13 +111,13 @@ export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
 
   await cancelAllNotifications();
 
-  const { hour: wakeH, minute: wakeM } = parseTime(opts.wakeTime);
-  const { hour: sleepH } = parseTime(opts.sleepTime);
+  const wake = parseTime(opts.wakeTime);
+  const sleep = parseTime(opts.sleepTime);
 
   const now = new Date();
-  const scheduleTime = (hour: number, minute: number, message: string) => {
+  const scheduleTime = (hour: number, minute: number, message: string, tasktitle: string) => {
     // Skip if within quiet hours
-    if (isWithinQuietHours(hour, wakeH, sleepH)) return;
+    if (isWithinQuietHours(hour * 60 + minute, wake.mins, sleep.mins)) return;
 
     const trigger = new Date();
     trigger.setHours(hour, minute, 0, 0);
@@ -127,7 +128,7 @@ export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
 
     Notifications.scheduleNotificationAsync({
       content: {
-        title: 'GrindMind',
+        title: tasktitle ? tasktitle : 'GrindMind',
         body: message,
       },
       trigger: {
@@ -143,11 +144,11 @@ export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
 
   // Fetch today's tasks
   const pendingTasks = getTodaysPendingTasks(opts.userId);
+  const floatingTasks = pendingTasks.filter((t: any) => !t.scheduled_time);
 
   // 1. Morning — at wake time
   const morningMessage = getRoastMessage(opts.accountabilityMode, 'morning');
-
-  scheduleTime(wakeH, wakeM, morningMessage);
+  scheduleTime(wake.hour, wake.minute, morningMessage, "");
 
   // Schedule task-specific reminders for each pending task
   for (const task of pendingTasks) {
@@ -157,41 +158,35 @@ export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
   }
 
   // Calculate day length
-  const startMins = wakeH * 60 + wakeM;
-  const endMins = sleepH < wakeH ? (sleepH + 24) * 60 : sleepH * 60; // Handle wrapping past midnight
-  const dayDurationMins = endMins - startMins;
+  const endMins = sleep.mins < wake.mins ? sleep.mins + 24 * 60 : sleep.mins;
+  const dayDurationMins = endMins - wake.mins;
 
-  // 2. Mid-morning — 25% of the day
-  const q1Mins = startMins + Math.floor(dayDurationMins * 0.25);
-  scheduleTime(
-    Math.floor(q1Mins / 60) % 24,
-    q1Mins % 60,
-    getRoastMessage(opts.accountabilityMode, 'missed_task')
-  );
+  // Floating tasks — 4 intervals (20%, 40%, 60%, 80%) of the day
+  const intervals = [0.2, 0.4, 0.6, 0.8];
 
-  // 3. Midday — 50% of the day
-  const midMins = startMins + Math.floor(dayDurationMins * 0.5);
-  scheduleTime(
-    Math.floor(midMins / 60) % 24,
-    midMins % 60,
-    getRoastMessage(opts.accountabilityMode, 'missed_task')
-  );
+  intervals.forEach((fraction, index) => {
+    const triggerMins = wake.mins + Math.floor(dayDurationMins * fraction);
+    const triggerH = Math.floor(triggerMins / 60) % 24;
+    const triggerM = triggerMins % 60;
 
-  // 4. Afternoon — 75% of the day
-  const q3Mins = startMins + Math.floor(dayDurationMins * 0.75);
-  scheduleTime(
-    Math.floor(q3Mins / 60) % 24,
-    q3Mins % 60,
-    getRoastMessage(opts.accountabilityMode, 'recovery_pending')
-  );
+    // Pick a floating task to nag about, or use default roast
+    let message = getRoastMessage(opts.accountabilityMode, 'missed_task');
+    let taskTitle = "";
+    if (floatingTasks.length > 0) {
+      const taskIndex = index % floatingTasks.length;
+      taskTitle = `⏰ Chal shuru kar: ${floatingTasks[taskIndex].title}`;
+    } else if (index >= 2) {
+      message = getRoastMessage(opts.accountabilityMode, 'recovery_pending');
+    }
 
-  // 5. Evening — 1 hour before sleep
-  const eveningH = sleepH > 0 ? sleepH - 1 : 23;
-  scheduleTime(
-    eveningH,
-    0,
-    getRoastMessage(opts.accountabilityMode, 'evening')
-  );
+    scheduleTime(triggerH, triggerM, message, taskTitle);
+  });
+
+  // Evening — 1 hour before sleep
+  const eveningMins = endMins - 60;
+  const eveningH = Math.floor(eveningMins / 60) % 24;
+  const eveningM = (eveningMins % 60 + 60) % 60; // ensure positive
+  scheduleTime(eveningH, eveningM, getRoastMessage(opts.accountabilityMode, 'evening'), "");
 };
 
 // ─── Schedule a task-specific reminder ───────────────────────────────────────
@@ -202,15 +197,17 @@ export const scheduleTaskReminder = async (
   sleepTime: string,
   userId: string
 ) => {
-  const { hour, minute } = parseTime(task.scheduled_time || '08:00');
-  const { hour: wakeH } = parseTime(wakeTime);
-  const { hour: sleepH } = parseTime(sleepTime);
+  const tTime = parseTime(task.scheduled_time || '08:00');
+  const wake = parseTime(wakeTime);
+  const sleep = parseTime(sleepTime);
 
-  if (isWithinQuietHours(hour, wakeH, sleepH)) return;
+  if (isWithinQuietHours(tTime.mins, wake.mins, sleep.mins)) return;
 
   const trigger = new Date();
-  trigger.setHours(hour, minute, 0, 0);
-  if (trigger <= new Date()) trigger.setDate(trigger.getDate() + 1);
+  trigger.setHours(tTime.hour, tTime.minute, 0, 0);
+
+  // Do NOT schedule for tomorrow if time already passed today
+  if (trigger <= new Date()) return;
 
   const body = `⏰ Chal shuru kar: ${task.title}`;
 

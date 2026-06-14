@@ -74,6 +74,14 @@ export const parseMarkdownRoutine = (markdown: string): GeneratedRoutine => {
         }
       } 
       // Properties
+      else if (propText.toLowerCase().startsWith('time:') || propText.toLowerCase().startsWith('scheduled time:')) {
+        const val = propText.replace(/^(time:|scheduled time:)\s*/i, '').trim();
+        // Extract just the HH:MM part in case they add extra text
+        const timeMatch = val.match(/\d{1,2}:\d{2}/);
+        if (timeMatch) {
+          currentTask.scheduled_time = timeMatch[0];
+        }
+      }
       else if (propText.toLowerCase().startsWith('priority:')) {
         const val = propText.substring(9).trim().toLowerCase();
         if (['high', 'medium', 'low'].includes(val)) {

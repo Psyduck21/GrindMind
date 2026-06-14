@@ -33,6 +33,7 @@ Goal: [Routine Goal]
 ## Week 1
 ### Monday
 #### [Task Title]
+- Time: HH:MM (optional)
 - Priority: high
 - Duration: 30
 - Category: [Task Category]
