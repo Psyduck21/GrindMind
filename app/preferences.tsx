@@ -12,6 +12,7 @@ import { COLORS, TYPOGRAPHY, SHADOWS } from '../src/constants/theme';
 import { supabase } from '../src/supabase/client';
 import { db } from '../src/db/db';
 import { useAlert } from '../src/components/ui/AlertProvider';
+import { scheduleDailyNotifications } from '../src/services/notification/notificationScheduler';
 
 const MODES = [
   { id: 'friendly', label: 'Friendly' },
@@ -79,6 +80,14 @@ export default function PreferencesScreen() {
         .eq('id', userRec.id);
 
       if (error) throw error;
+
+      // Reschedule notifications with the new preferences
+      await scheduleDailyNotifications({
+        userId: userRec.id,
+        accountabilityMode: mode as any,
+        wakeTime,
+        sleepTime,
+      }).catch(err => console.error('Failed to reschedule notifications:', err));
 
       showAlert('Success', 'Profile updated successfully.');
       router.back();

@@ -10,6 +10,7 @@ import { supabase } from '../../src/supabase/client';
 import { db } from '../../src/db/db';
 import { pullSync } from '../../src/services/sync/syncEngine';
 import { useAlert } from '../../src/components/ui/AlertProvider';
+import { scheduleDailyNotifications } from '../../src/services/notification/notificationScheduler';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -91,6 +92,14 @@ export default function OnboardingScreen() {
       // Initialize sync state in the background without blocking the UI
       pullSync().catch(console.error);
 
+      // Schedule initial notifications for onboarding user
+      await scheduleDailyNotifications({
+        userId: newUserId,
+        accountabilityMode: accountabilityMode as any,
+        wakeTime,
+        sleepTime,
+      }).catch(err => console.error('Failed to schedule onboarding notifications:', err));
+
       // Skip task generation and go straight to dashboard
       router.push('/(tabs)');
     } catch (e: any) {
@@ -103,7 +112,7 @@ export default function OnboardingScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        
+
         <View style={styles.stepContainer}>
           <Text style={styles.title}>Welcome</Text>
           <Text style={styles.subtitle}>Let's set up your profile</Text>
@@ -120,7 +129,7 @@ export default function OnboardingScreen() {
 
           <Text style={styles.title}>Mode Select</Text>
           <Text style={styles.subtitle}>Sets your coaching tone</Text>
-          
+
           {[
             { id: 'friendly', icon: '😊', name: 'Friendly', desc: `"I'll be gentle with you"` },
             { id: 'coach', icon: '💪', name: 'Coach', desc: `"Firm but fair"` },
@@ -151,10 +160,10 @@ export default function OnboardingScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button 
-          title="Complete Setup" 
-          onPress={finalizeOnboarding} 
-          style={{ flex: 1, backgroundColor: COLORS.txt }} 
+        <Button
+          title="Complete Setup"
+          onPress={finalizeOnboarding}
+          style={{ flex: 1, backgroundColor: COLORS.txt }}
           loading={loading}
         />
       </View>

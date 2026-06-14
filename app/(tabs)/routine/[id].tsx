@@ -6,6 +6,7 @@ import { COLORS, TYPOGRAPHY } from '../../../src/constants/theme';
 import { useRoutine, useTasks, useHabits, useRoutineWeeks } from '../../../src/hooks/useQueries';
 import { FloatingCard } from '../../../src/components/ui/FloatingCard';
 import { ChevronDown, ChevronRight, ArrowLeft, CheckCircle } from 'lucide-react-native';
+import { db } from '../../../src/db/db';
 
 export default function RoutineDetailScreen() {
   const router = useRouter();
@@ -25,18 +26,36 @@ export default function RoutineDetailScreen() {
     );
   };
 
+  // Dynamically determine day order from the tasks insertion order in SQLite
+  const dayOrder = useMemo(() => {
+    if (!routineId) return ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    try {
+      const rows = db.getAllSync<{ target_day: string }>(
+        'SELECT DISTINCT target_day FROM tasks WHERE routine_id = ? ORDER BY rowid ASC',
+        [routineId]
+      );
+      const orderedDays = rows.map(r => r.target_day).filter(Boolean);
+      const standardDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      const missingDays = standardDays.filter(d => !orderedDays.includes(d));
+      return [...orderedDays, ...missingDays];
+    } catch (e) {
+      console.error('Error getting day order:', e);
+      return ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    }
+  }, [routineId, tasks]);
+
   const groupedTasks = useMemo(() => {
     if (!tasks) return {};
     const groups: Record<number, Record<string, any[]>> = {};
     tasks.forEach(t => {
       const w = t.target_week || 1;
-      const d = t.target_day || 'Monday';
+      const d = t.target_day || dayOrder[0] || 'Monday';
       if (!groups[w]) groups[w] = {};
       if (!groups[w][d]) groups[w][d] = [];
       groups[w][d].push(t);
     });
     return groups;
-  }, [tasks]);
+  }, [tasks, dayOrder]);
 
   if (routineLoading || tasksLoading) {
     return (
@@ -92,7 +111,7 @@ export default function RoutineDetailScreen() {
 
                 {isExpanded && (
                   <View style={styles.daysContainer}>
-                    {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
+                    {dayOrder.map(day => {
                       const dayTasks = groupedTasks[week][day];
                       if (!dayTasks || dayTasks.length === 0) return null;
 
