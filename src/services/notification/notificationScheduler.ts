@@ -24,7 +24,7 @@ export const requestNotificationPermissions = async (): Promise<boolean> => {
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#0D5C4A',
-      sound: 'roast.wav', // Points to the local audio file in assets
+      sound: 'roast', // Android requires omitting the extension
     });
   }
 
@@ -131,7 +131,7 @@ export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
         title: 'GrindMind',
         body: message,
         data: { type: 'daily', userId: String(opts.userId) },
-        sound: 'roast.wav',
+        sound: Platform.OS === 'android' ? 'roast' : 'roast.wav',
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -222,7 +222,7 @@ export const scheduleTaskReminder = async (
       title: 'GrindMind',
       body,
       data: { type: 'task_reminder', taskId: String(task.id), userId: String(userId) },
-      sound: 'roast.wav',
+      sound: Platform.OS === 'android' ? 'roast' : 'roast.wav',
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -254,27 +254,34 @@ const logNotification = (
 
 // ─── Send Test Notification ───────────────────────────────────────────────────
 export const sendTestNotification = async () => {
-  const hasPermission = await requestNotificationPermissions();
-  if (!hasPermission) {
-    console.log('No notification permissions');
-    return;
+  try {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) {
+      console.log('No notification permissions');
+      return;
+    }
+
+    console.log('Permissions granted, scheduling test notification...');
+
+    // Schedule for 2 seconds from now
+    const trigger = new Date(Date.now() + 2000);
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'GrindMind Test',
+        body: 'Testing notifications. Did you hear the roast?',
+        data: { type: 'test' },
+        sound: Platform.OS === 'android' ? 'roast' : 'roast.wav',
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: trigger.getTime(),
+        channelId: 'grindmind_alerts',
+      },
+    });
+    console.log('Test notification scheduled for 2 seconds from now!');
+  } catch (error) {
+    console.error('Failed to schedule test notification:', error);
+    throw error;
   }
-
-  // Schedule for 2 seconds from now
-  const trigger = new Date(Date.now() + 2000);
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'GrindMind Test',
-      body: 'Testing notifications. Did you hear the roast?',
-      data: { type: 'test' },
-      sound: 'roast.wav',
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: trigger.getTime(),
-      channelId: 'grindmind_alerts',
-    },
-  });
-  console.log('Test notification scheduled for 2 seconds from now!');
 };

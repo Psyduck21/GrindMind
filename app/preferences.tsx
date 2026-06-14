@@ -216,18 +216,18 @@ export default function PreferencesScreen() {
 
         {/* Test Notification Settings */}
         <TouchableOpacity 
-          style={styles.notificationBtn} 
-          onPress={() => {
-             sendTestNotification();
-             showAlert('Test Sent', 'Notification scheduled for 2 seconds. You may need to minimize the app to see the system banner.');
+          style={styles.testNotificationBtn} 
+          onPress={async () => {
+             try {
+               await sendTestNotification();
+               showAlert('Test Sent', 'Notification scheduled for 2 seconds. You may need to minimize the app to see the system banner.');
+             } catch (error: any) {
+               showAlert('Test Failed', `Error: ${error.message || 'Unknown error'}`);
+             }
           }} 
-          activeOpacity={0.8}
+          activeOpacity={0.5}
         >
-          <View>
-            <Text style={styles.notificationText}>Send Test Notification</Text>
-            <Text style={styles.notificationSubtext}>Verify your notification settings</Text>
-          </View>
-          <ArrowRight color={COLORS.txt} size={20} />
+          <Text style={styles.testNotificationText}>Send Test Notification</Text>
         </TouchableOpacity>
 
         <Button
@@ -332,6 +332,19 @@ const styles = StyleSheet.create({
   notificationSubtext: {
     ...TYPOGRAPHY.caption,
     color: COLORS.txt2,
+  },
+
+  testNotificationBtn: {
+    alignSelf: 'center',
+    padding: 8,
+    marginTop: -16,
+    marginBottom: 32,
+    opacity: 0.3,
+  },
+  testNotificationText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.txt2,
+    fontSize: 10,
   },
 
   signOutBtn: {
