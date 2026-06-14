@@ -24,6 +24,10 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.akshatprj.grindmind"
     },
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#0D5C4A"
+    },
     "web": {
       "favicon": "./assets/icon.png"
     },
@@ -32,7 +36,25 @@
       "expo-sqlite",
       "expo-secure-store",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#0D5C4A",
+          "sounds": ["./assets/roast.wav"]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ],
+      "./plugins/withAndroidSplitApk.js"
     ],
     "extra": {
       "router": {},

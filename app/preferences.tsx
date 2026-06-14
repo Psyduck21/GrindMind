@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowRight } from 'lucide-react-native';
@@ -186,6 +186,19 @@ export default function PreferencesScreen() {
           />
         </FloatingCard>
 
+        {/* Notification Settings */}
+        <TouchableOpacity 
+          style={styles.notificationBtn} 
+          onPress={() => Linking.openSettings()} 
+          activeOpacity={0.8}
+        >
+          <View>
+            <Text style={styles.notificationText}>Change Notification Sound</Text>
+            <Text style={styles.notificationSubtext}>Opens Android system settings</Text>
+          </View>
+          <ArrowRight color={COLORS.txt} size={20} />
+        </TouchableOpacity>
+
         <Button
           title="Save Changes"
           onPress={handleSave}
@@ -266,6 +279,28 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 32,
     zIndex: 1,
+  },
+
+  notificationBtn: {
+    backgroundColor: COLORS.white,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  notificationText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.txt,
+    marginBottom: 4,
+  },
+  notificationSubtext: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.txt2,
   },
 
   signOutBtn: {

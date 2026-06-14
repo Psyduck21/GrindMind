@@ -8,16 +8,27 @@ import uuid from 'react-native-uuid';
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true,
   }),
 });
 
-// ─── Permission request ───────────────────────────────────────────────────────
+// ─── Permission request & Channel Setup ──────────────────────────────────────
 export const requestNotificationPermissions = async (): Promise<boolean> => {
   if (Platform.OS === 'web') return false;
+
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#0D5C4A',
+      sound: 'roast.wav', // Points to the local audio file in assets
+    });
+  }
+
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   if (existingStatus === 'granted') return true;
   const { status } = await Notifications.requestPermissionsAsync();
@@ -136,14 +147,7 @@ export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
   const pendingTasks = getTodaysPendingTasks(opts.userId);
 
   // 1. Morning — at wake time
-  let morningMessage = getRoastMessage(opts.accountabilityMode, 'morning');
-  if (pendingTasks.length > 0) {
-    const titles = pendingTasks.slice(0, 3).map(t => t.title).join(', ');
-    const extra = pendingTasks.length > 3 ? ` and ${pendingTasks.length - 3} more` : '';
-    morningMessage = `Wake up! You have ${pendingTasks.length} tasks today: ${titles}${extra}.\n\n${morningMessage}`;
-  } else {
-    morningMessage = `Wake up! You have a free day today. Enjoy the rest.\n\n${morningMessage}`;
-  }
+  const morningMessage = getRoastMessage(opts.accountabilityMode, 'morning');
 
   scheduleTime(wakeH, wakeM, morningMessage);
 
@@ -210,7 +214,7 @@ export const scheduleTaskReminder = async (
   trigger.setHours(hour, minute, 0, 0);
   if (trigger <= new Date()) trigger.setDate(trigger.getDate() + 1);
 
-  const body = `⏰ Time to start: ${task.title}`;
+  const body = `⏰ Chal shuru kar: ${task.title}`;
 
   await Notifications.scheduleNotificationAsync({
     content: {
