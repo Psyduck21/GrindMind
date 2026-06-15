@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -14,7 +14,9 @@ import { runFullSync } from '../src/services/sync/syncEngine';
 import { AlertProvider } from '../src/components/ui/AlertProvider';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-const queryClient = new QueryClient();
+import { startRealtimeSync, stopRealtimeSync } from '../src/services/sync/realtimeEngine';
+
+export const queryClient = new QueryClient();
 
 const AppTheme = {
   ...DefaultTheme,
@@ -29,6 +31,7 @@ const AppTheme = {
 
 export default function RootLayout() {
   const [dbInitialized, setDbInitialized] = useState(false);
+  const realtimeChannelRef = useRef<any>(null);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -42,9 +45,17 @@ export default function RootLayout() {
       initDb();
       setupDatabase();
 
+      // Auto-reschedule missed tasks from past days
+      try {
+        const { autoRescheduleMissedTasks } = require('../src/services/task/autoRescheduler');
+        autoRescheduleMissedTasks();
+      } catch (e) {
+        console.error('Failed to run autoRescheduler:', e);
+      }
+
       // Schedule daily notifications if user exists
       try {
-        const user = db.getFirstSync<any>('SELECT * FROM users LIMIT 1');
+        const user = await db.getFirstAsync<any>('SELECT * FROM users LIMIT 1');
         if (user) {
           await requestNotificationPermissions();
           await scheduleDailyNotifications({
@@ -53,6 +64,10 @@ export default function RootLayout() {
             wakeTime: user.wake_time || '06:00',
             sleepTime: user.sleep_time || '23:00',
           });
+          
+          // Initialize Realtime Sync
+          const channel = startRealtimeSync(user.id);
+          realtimeChannelRef.current = channel;
         }
       } catch {
         // Non-critical — app works without notifications
@@ -65,6 +80,12 @@ export default function RootLayout() {
     };
 
     boot();
+    
+    return () => {
+      if (realtimeChannelRef.current) {
+        stopRealtimeSync(realtimeChannelRef.current);
+      }
+    };
   }, []);
 
   // Listen for network connectivity to flush offline queue and pull updates

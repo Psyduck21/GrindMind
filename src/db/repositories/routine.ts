@@ -23,8 +23,29 @@ export const buildRoutinePayload = (userId: string, generated: GeneratedRoutine)
   const tasks_payload: any[] = [];
   const subtasks_payload: any[] = [];
 
+  const baseDate = new Date();
+  
+  // Calculate start of the current week (Monday)
+  const day = baseDate.getDay();
+  const diffToMonday = baseDate.getDate() - day + (day === 0 ? -6 : 1);
+  const startOfWeek = new Date(baseDate.setDate(diffToMonday));
+  startOfWeek.setHours(0,0,0,0);
+
+  const DAY_OFFSETS: Record<string, number> = {
+    'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3,
+    'Friday': 4, 'Saturday': 5, 'Sunday': 6
+  };
+
+  const getScheduledDateStr = (targetWeek: number, targetDay: string) => {
+    const offsetDays = ((targetWeek - 1) * 7) + (DAY_OFFSETS[targetDay] || 0);
+    const scheduledDate = new Date(startOfWeek);
+    scheduledDate.setDate(startOfWeek.getDate() + offsetDays);
+    return scheduledDate.toISOString().split('T')[0];
+  };
+
   generated.tasks.forEach((task) => {
     const taskId = uuid.v4() as string;
+    const scheduledDate = getScheduledDateStr(task.target_week, task.target_day);
     
     tasks_payload.push({
       id: taskId,
@@ -39,6 +60,10 @@ export const buildRoutinePayload = (userId: string, generated: GeneratedRoutine)
       recurrence_rule: task.recurrence_rule || '',
       target_week: task.target_week,
       target_day: task.target_day,
+      scheduled_date: scheduledDate,
+      is_backlog: 0,
+      is_time_locked: 0,
+      is_gamified: 1,
       created_at: now,
       updated_at: now
     });
@@ -60,10 +85,10 @@ export const buildRoutinePayload = (userId: string, generated: GeneratedRoutine)
   return { routineId, routine_payload, tasks_payload, subtasks_payload };
 };
 
-export const getActiveRoutine = (userId: string) => {
-  return db.getFirstSync<any>(`SELECT * FROM routines WHERE user_id = ? AND status = 'active'`, [userId]);
+export const getActiveRoutine = async (userId: string) => {
+  return await db.getFirstAsync<any>(`SELECT * FROM routines WHERE user_id = ? AND status = 'active'`, [userId]);
 };
 
-export const getTasksForRoutine = (routineId: string) => {
-  return db.getAllSync<any>(`SELECT * FROM tasks WHERE routine_id = ? ORDER BY scheduled_time ASC`, [routineId]);
+export const getTasksForRoutine = async (routineId: string) => {
+  return await db.getAllAsync<any>(`SELECT * FROM tasks WHERE routine_id = ? ORDER BY scheduled_time ASC`, [routineId]);
 };

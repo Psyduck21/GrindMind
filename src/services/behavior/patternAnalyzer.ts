@@ -23,9 +23,9 @@ const getTimeBucket = (time: string | null): string => {
  * Analyzes the last 14 days of task completion data to detect failure patterns.
  * Fully deterministic — no AI involved.
  */
-export const analyzePatterns = (userId: string): FailurePattern => {
+export const analyzePatterns = async (userId: string): Promise<FailurePattern> => {
   // ─── Skip rate ───────────────────────────────────────────────────────────
-  const completions = db.getAllSync<any>(
+  const completions = await db.getAllAsync<any>(
     `SELECT tc.*, t.priority, t.category, t.scheduled_time
      FROM task_completions tc
      JOIN tasks t ON tc.task_id = t.id
@@ -71,7 +71,7 @@ export const analyzePatterns = (userId: string): FailurePattern => {
   const mostSkippedCategory = worstCat ? worstCat[0] : null;
 
   // ─── Consecutive miss days ────────────────────────────────────────────────
-  const missDates = db.getAllSync<any>(
+  const missDates = await db.getAllAsync<any>(
     `SELECT DISTINCT date FROM task_completions
      WHERE user_id = ? AND state = 'skipped'
      ORDER BY date DESC`,

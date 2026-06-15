@@ -27,21 +27,29 @@ export default function RoutineDetailScreen() {
   };
 
   // Dynamically determine day order from the tasks insertion order in SQLite
-  const dayOrder = useMemo(() => {
-    if (!routineId) return ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    try {
-      const rows = db.getAllSync<{ target_day: string }>(
-        'SELECT DISTINCT target_day FROM tasks WHERE routine_id = ? ORDER BY rowid ASC',
-        [routineId]
-      );
-      const orderedDays = rows.map(r => r.target_day).filter(Boolean);
-      const standardDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-      const missingDays = standardDays.filter(d => !orderedDays.includes(d));
-      return [...orderedDays, ...missingDays];
-    } catch (e) {
-      console.error('Error getting day order:', e);
-      return ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    }
+  const [dayOrder, setDayOrder] = useState<string[]>(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
+
+  React.useEffect(() => {
+    const fetchDayOrder = async () => {
+      if (!routineId) {
+        setDayOrder(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
+        return;
+      }
+      try {
+        const rows = await db.getAllAsync<{ target_day: string }>(
+          'SELECT DISTINCT target_day FROM tasks WHERE routine_id = ? ORDER BY rowid ASC',
+          [routineId]
+        );
+        const orderedDays = rows.map(r => r.target_day).filter(Boolean);
+        const standardDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        const missingDays = standardDays.filter(d => !orderedDays.includes(d));
+        setDayOrder([...orderedDays, ...missingDays]);
+      } catch (e) {
+        console.error('Error getting day order:', e);
+        setDayOrder(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
+      }
+    };
+    fetchDayOrder();
   }, [routineId, tasks]);
 
   const groupedTasks = useMemo(() => {

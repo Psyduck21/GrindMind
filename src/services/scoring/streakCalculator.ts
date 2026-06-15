@@ -4,8 +4,8 @@ import { db } from '../../db/db';
  * Returns the current consecutive-day completion streak for a user.
  * A day counts toward the streak if at least one task was completed on that date.
  */
-export const calculateStreak = (userId: string): number => {
-  const rows = db.getAllSync<any>(
+export const calculateStreak = async (userId: string): Promise<number> => {
+  const rows = await db.getAllAsync<any>(
     `SELECT DISTINCT date FROM task_completions
      WHERE user_id = ? AND state = 'completed'
      ORDER BY date DESC`,
@@ -46,7 +46,8 @@ const XP_TABLE: Record<string, number> = {
   recovery: 25,
 };
 
-export const getXpForTask = (priority: string, isRecovery: boolean): number => {
+export const getXpForTask = (priority: string, isRecovery: boolean, isGamified: boolean = true): number => {
+  if (!isGamified) return 0;
   if (isRecovery) return XP_TABLE.recovery;
   return XP_TABLE[priority] || 10;
 };

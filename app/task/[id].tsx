@@ -39,13 +39,13 @@ export default function TaskDetailScreen() {
 
   const { data: task, isLoading } = useQuery({
     queryKey: ['task', id],
-    queryFn: () => db.getFirstSync<any>('SELECT * FROM tasks WHERE id = ?', [id]),
+    queryFn: async () => await db.getFirstAsync<any>('SELECT * FROM tasks WHERE id = ?', [id]),
     enabled: !!id,
   });
 
   const { data: user } = useQuery({
     queryKey: ['user'],
-    queryFn: () => db.getFirstSync<any>('SELECT * FROM users LIMIT 1'),
+    queryFn: async () => await db.getFirstAsync<any>('SELECT * FROM users LIMIT 1'),
   });
 
   if (isLoading) return <ActivityIndicator style={{ flex: 1 }} color={COLORS.txt} />;
@@ -60,7 +60,7 @@ export default function TaskDetailScreen() {
     try {
       const now = Date.now();
       const dateStr = getLocalYYYYMMDD();
-      const xp = getXpForTask(task.priority, task.is_recovery_task === 1);
+      const xp = getXpForTask(task.priority, task.is_recovery_task === 1, task.is_gamified === 1);
 
       // Optimistic updates
       queryClient.setQueryData(['tasks', task.routine_id], (old: any) => {
@@ -72,11 +72,11 @@ export default function TaskDetailScreen() {
         return { ...old, status: 'completed' };
       });
 
-      db.runSync(`UPDATE tasks SET status = 'completed', updated_at = ? WHERE id = ?`, [now, task.id]);
+      await db.runAsync(`UPDATE tasks SET status = 'completed', updated_at = ? WHERE id = ?`, [now, task.id]);
       queueOperation('tasks', 'UPDATE', { id: task.id, status: 'completed', updated_at: now });
 
       const completionId = uuid.v4();
-      db.runSync(
+      await db.runAsync(
         `INSERT INTO task_completions (id, task_id, user_id, date, completed_at, state, xp_awarded, created_at)
          VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)`,
         [completionId, task.id, user?.id || '', dateStr, now, xp, now]
@@ -87,7 +87,7 @@ export default function TaskDetailScreen() {
 
       // Check if this completes the week
       if (task.target_week) {
-        const weekTasks = db.getAllSync<any>(
+        const weekTasks = await db.getAllAsync<any>(
           'SELECT status FROM tasks WHERE routine_id = ? AND target_week = ?',
           [task.routine_id, task.target_week]
         );
@@ -95,7 +95,7 @@ export default function TaskDetailScreen() {
         
         if (allCompleted) {
           const rwId = uuid.v4();
-          db.runSync(`
+          await db.runAsync(`
             INSERT OR IGNORE INTO routine_weeks (id, routine_id, week_number, is_completed, completed_at, created_at, updated_at)
             VALUES (?, ?, ?, 1, ?, ?, ?)
           `, [rwId, task.routine_id, task.target_week, now, now, now]);
@@ -112,7 +112,7 @@ export default function TaskDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['task', id] });
 
       // Check for newly unlocked badges
-      const unlocked = checkAndAwardBadges(user?.id || '');
+      const unlocked = await checkAndAwardBadges(user?.id || '');
       const badgeMsg = unlocked.length > 0
         ? `\n\n🏅 Badge unlocked: ${unlocked.join(', ')}!`
         : '';
@@ -233,19 +233,26 @@ export default function TaskDetailScreen() {
 
       {/* Action Footer */}
       {!isDone && !isSkipped && (
-        <View style={styles.footer}>
+        <View style={styles.footerContainer}>
           <Button
-            title="Skip"
-            variant="outline-dark"
-            onPress={() => setSkipModalVisible(true)}
-            style={{ flex: 1 }}
+            title="Enter Zen Mode 🧘‍♂️"
+            onPress={() => router.push(`/task/zen/${task.id}`)}
+            style={{ marginBottom: 12, backgroundColor: COLORS.primary }}
           />
-          <Button
-            title="Complete ✓"
-            onPress={handleComplete}
-            loading={loading}
-            style={{ flex: 2, marginLeft: 16, backgroundColor: COLORS.txt }}
-          />
+          <View style={styles.footer}>
+            <Button
+              title="Skip"
+              variant="outline-dark"
+              onPress={() => setSkipModalVisible(true)}
+              style={{ flex: 1 }}
+            />
+            <Button
+              title="Complete ✓"
+              onPress={handleComplete}
+              loading={loading}
+              style={{ flex: 2, marginLeft: 16, backgroundColor: COLORS.txt }}
+            />
+          </View>
         </View>
       )}
 
@@ -337,13 +344,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   skippedBannerText: { ...TYPOGRAPHY.h2, color: COLORS.danger },
+  footerContainer: {
+    backgroundColor: COLORS.white,
+    padding: 24,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    ...SHADOWS.floating,
+  },
   footer: { 
     flexDirection: 'row', 
-    padding: 24, 
-    borderTopWidth: 1, 
-    borderTopColor: COLORS.border,
-    backgroundColor: COLORS.white,
-    ...SHADOWS.floating,
   },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: {

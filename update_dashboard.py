@@ -1,13 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import re
+
+content = """import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Dimensions, Modal, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Flame, BarChart2, Calendar as CalendarIcon, Clock, Sparkles } from 'lucide-react-native';
+import { Flame, BarChart2, Calendar as CalendarIcon, Clock } from 'lucide-react-native';
 import { useUser, useAllActiveRoutines, useAgendaTasks, useHabits } from '../../src/hooks/useQueries';
 import { CircularProgress } from '../../src/components/ui/CircularProgress';
 import { TaskRow } from '../../src/components/dashboard/TaskRow';
 import { HabitTracker } from '../../src/components/dashboard/HabitTracker';
-import { AIOrchestratorModal } from '../../src/components/dashboard/AIOrchestratorModal';
 import { GradientHeroCard } from '../../src/components/ui/GradientHeroCard';
 import { COLORS, TYPOGRAPHY, SHADOWS } from '../../src/constants/theme';
 import { calculateStreak } from '../../src/services/scoring/streakCalculator';
@@ -34,7 +35,6 @@ export default function DashboardScreen() {
   const [selectedDate, setSelectedDate] = useState(getLocalYYYYMMDD(new Date()));
   const [rescheduleModalVisible, setRescheduleModalVisible] = useState(false);
   const [selectedTaskForReschedule, setSelectedTaskForReschedule] = useState<any>(null);
-  const [isAIModalVisible, setIsAIModalVisible] = useState(false);
 
   // Flatten tasks for progress calculation
   const allTasks = useMemo(() => {
@@ -185,24 +185,6 @@ export default function DashboardScreen() {
         </View>
       </Modal>
 
-      {/* AI Orchestrator FAB */}
-      <TouchableOpacity 
-        style={styles.fab}
-        activeOpacity={0.8}
-        onPress={() => setIsAIModalVisible(true)}
-      >
-        <Sparkles color={COLORS.white} size={24} />
-      </TouchableOpacity>
-
-      <AIOrchestratorModal 
-        visible={isAIModalVisible} 
-        onClose={() => setIsAIModalVisible(false)} 
-        userId={user?.id}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['tasks', 'agenda'] });
-        }}
-      />
-
     </SafeAreaView>
   );
 }
@@ -310,22 +292,8 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.txt,
   },
-  doneBtnText: {
-    ...TYPOGRAPHY.button,
-    color: COLORS.txt,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.fab,
-    shadowColor: COLORS.primary, // Add a glow effect
-    elevation: 8,
-  }
 });
+"""
+
+with open('app/(tabs)/index.tsx', 'w') as f:
+    f.write(content)

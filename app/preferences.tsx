@@ -39,9 +39,9 @@ export default function PreferencesScreen() {
   const [age, setAge] = useState('');
 
   useEffect(() => {
-    const loadUser = () => {
+    const loadUser = async () => {
       try {
-        const u: any = db.getFirstSync('SELECT * FROM users LIMIT 1');
+        const u: any = await db.getFirstAsync('SELECT * FROM users LIMIT 1');
         if (u) {
           setUserRec(u);
           setMode(u.accountability_mode || 'coach');
@@ -65,10 +65,12 @@ export default function PreferencesScreen() {
       const ageNum = parseInt(age) || null;
 
       // Update Local SQLite
-      db.runSync(
-        'UPDATE users SET accountability_mode = ?, wake_time = ?, sleep_time = ?, age = ? WHERE id = ?',
-        [mode, wakeTime, sleepTime, ageNum, userRec.id]
-      );
+      await db.withTransactionAsync(async () => {
+        await db.runAsync(
+          'UPDATE users SET accountability_mode = ?, wake_time = ?, sleep_time = ?, age = ? WHERE id = ?',
+          [mode, wakeTime, sleepTime, ageNum, userRec.id]
+        );
+      });
 
       // Update Supabase
       const { error } = await supabase

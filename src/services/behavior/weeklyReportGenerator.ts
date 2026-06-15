@@ -17,7 +17,7 @@ export interface WeeklyReport {
   promiseKeptRate: number;
   streak: number;
   suggestions: ReturnType<typeof generateSuggestions>;
-  pattern: ReturnType<typeof analyzePatterns>;
+  pattern: Awaited<ReturnType<typeof analyzePatterns>>;
   aiGenerated: boolean;
 }
 
@@ -25,7 +25,7 @@ export interface WeeklyReport {
  * Generates a weekly report for the current week (last 7 days).
  * Persists to SQLite and returns the report data.
  */
-export const generateWeeklyReport = (userId: string, routineId: string): WeeklyReport => {
+export const generateWeeklyReport = async (userId: string, routineId: string): Promise<WeeklyReport> => {
   const today = new Date();
   const weekEnd = getLocalYYYYMMDD(today);
   const weekStartDate = new Date(today);
@@ -33,7 +33,7 @@ export const generateWeeklyReport = (userId: string, routineId: string): WeeklyR
   const weekStart = getLocalYYYYMMDD(weekStartDate);
 
   // ─── Task stats for the week ──────────────────────────────────────────────
-  const completions = db.getAllSync<any>(
+  const completions = await db.getAllAsync<any>(
     `SELECT tc.*, t.is_recovery_task FROM task_completions tc
      JOIN tasks t ON tc.task_id = t.id
      WHERE tc.user_id = ? AND tc.date BETWEEN ? AND ?`,
@@ -45,7 +45,7 @@ export const generateWeeklyReport = (userId: string, routineId: string): WeeklyR
   const recoveryCompleted = completions.filter((c) => c.state === 'completed' && c.is_recovery_task === 1).length;
 
   // ─── Consistency score: avg daily completion over 7 days ─────────────────
-  const dayStats = db.getAllSync<any>(
+  const dayStats = await db.getAllAsync<any>(
     `SELECT date,
        SUM(CASE WHEN state = 'completed' THEN 1 ELSE 0 END) as done,
        COUNT(*) as total
@@ -62,16 +62,18 @@ export const generateWeeklyReport = (userId: string, routineId: string): WeeklyR
   const consistencyScore = Math.round(avgScore);
 
   // ─── Behavior analysis ────────────────────────────────────────────────────
-  const pattern = analyzePatterns(userId);
-  const user = db.getFirstSync<any>('SELECT * FROM users WHERE id = ?', [userId]);
+  const pattern = await analyzePatterns(userId);
+  const user = await db.getFirstAsync<any>('SELECT * FROM users WHERE id = ?', [userId]);
   const suggestions = generateSuggestions(pattern, user?.available_daily_minutes || 90);
 
-  const streak = calculateStreak(userId);
-  const promiseKeptRate = calculatePromiseKeptRate(userId);
+  const streak = await calculateStreak(userId);
+  const promiseKeptRate = await calculatePromiseKeptRate(userId);
 
   // ─── Persist to SQLite ────────────────────────────────────────────────────
   const reportId = uuid.v4() as string;
-  db.runSync(
+  const createdAt = Date.now();
+  
+  await db.runAsync(
     `INSERT OR REPLACE INTO weekly_reports
      (id, user_id, week_start, week_end, tasks_completed, tasks_missed, recovery_completed,
       streak_change, consistency_score, behavior_summary, suggestions, ai_generated, created_at)
@@ -83,9 +85,32 @@ export const generateWeeklyReport = (userId: string, routineId: string): WeeklyR
       consistencyScore,
       JSON.stringify(pattern),
       JSON.stringify(suggestions),
-      Date.now(),
+      createdAt,
     ]
   );
+
+  // Queue report for cloud sync
+  try {
+    const { queueOperation } = require('../sync/syncEngine');
+    const payload = {
+      id: reportId,
+      user_id: userId,
+      week_start: weekStart,
+      week_end: weekEnd,
+      tasks_completed: tasksCompleted,
+      tasks_missed: tasksMissed,
+      recovery_completed: recoveryCompleted,
+      streak_change: streak,
+      consistency_score: consistencyScore,
+      behavior_summary: JSON.stringify(pattern),
+      suggestions: JSON.stringify(suggestions),
+      ai_generated: false,
+      created_at: createdAt
+    };
+    await queueOperation('weekly_reports', 'INSERT', payload);
+  } catch (err) {
+    console.error('Failed to queue weekly report sync', err);
+  }
 
   return {
     id: reportId,
@@ -106,8 +131,8 @@ export const generateWeeklyReport = (userId: string, routineId: string): WeeklyR
 /**
  * Loads the most recent weekly report from SQLite.
  */
-export const getLatestWeeklyReport = (userId: string): WeeklyReport | null => {
-  const row = db.getFirstSync<any>(
+export const getLatestWeeklyReport = async (userId: string): Promise<WeeklyReport | null> => {
+  const row = await db.getFirstAsync<any>(
     `SELECT * FROM weekly_reports WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`,
     [userId]
   );

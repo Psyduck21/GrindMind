@@ -17,6 +17,9 @@ export interface TaskItem {
   priority: 'critical' | 'high' | 'medium' | 'low';
   status: 'not_started' | 'completed' | 'missed' | 'skipped';
   is_recovery_task: number;
+  is_time_locked?: number;
+  is_gamified?: number;
+  ai_context?: string;
   subtasks?: Subtask[];
 }
 

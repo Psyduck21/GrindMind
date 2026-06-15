@@ -1,11 +1,22 @@
 import { db } from './db';
 
-export const setupDatabase = () => {
+export const setupDatabase = async () => {
   // Try to alter existing tasks table to add new columns, ignore errors if they exist
-  try { db.execSync('ALTER TABLE tasks ADD COLUMN target_week INTEGER DEFAULT 1;'); } catch (e) { }
-  try { db.execSync('ALTER TABLE tasks ADD COLUMN target_day TEXT DEFAULT "Monday";'); } catch (e) { }
+  try { await db.execAsync('ALTER TABLE tasks ADD COLUMN target_week INTEGER DEFAULT 1;'); } catch (e) { }
+  try { await db.execAsync('ALTER TABLE tasks ADD COLUMN target_day TEXT DEFAULT "Monday";'); } catch (e) { }
+  try { await db.execAsync('ALTER TABLE tasks ADD COLUMN scheduled_date TEXT;'); } catch (e) { }
+  try { await db.execAsync('ALTER TABLE tasks ADD COLUMN start_time TEXT;'); } catch (e) { }
+  try { await db.execAsync('ALTER TABLE tasks ADD COLUMN end_time TEXT;'); } catch (e) { }
+  try { await db.execAsync('ALTER TABLE tasks ADD COLUMN is_backlog INTEGER DEFAULT 0;'); } catch (e) { }
+  try { await db.execAsync('ALTER TABLE tasks ADD COLUMN is_time_locked INTEGER DEFAULT 0;'); } catch (e) { }
+  try { await db.execAsync('ALTER TABLE tasks ADD COLUMN is_gamified INTEGER DEFAULT 1;'); } catch (e) { }
+  try { await db.execAsync('ALTER TABLE tasks ADD COLUMN ai_context TEXT;'); } catch (e) { }
 
-  db.execSync(`
+  // Sync Engine V2 Migrations
+  try { await db.execAsync('ALTER TABLE subtasks ADD COLUMN updated_at INTEGER DEFAULT (cast(strftime(\'%s\',\'now\') as int) * 1000);'); } catch (e) { }
+  try { await db.execAsync('ALTER TABLE notifications ADD COLUMN updated_at INTEGER DEFAULT (cast(strftime(\'%s\',\'now\') as int) * 1000);'); } catch (e) { }
+
+  await db.execAsync(`
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY,
       name TEXT NOT NULL,
@@ -65,6 +76,13 @@ export const setupDatabase = () => {
       recurrence_rule TEXT,
       target_week INTEGER DEFAULT 1,
       target_day TEXT DEFAULT 'Monday',
+      scheduled_date TEXT,
+      start_time TEXT,
+      end_time TEXT,
+      is_backlog INTEGER DEFAULT 0,
+      is_time_locked INTEGER DEFAULT 0,
+      is_gamified INTEGER DEFAULT 1,
+      ai_context TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -74,7 +92,8 @@ export const setupDatabase = () => {
       task_id UUID NOT NULL REFERENCES tasks(id),
       title TEXT NOT NULL,
       is_completed INTEGER DEFAULT 0,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS habits (
@@ -141,7 +160,8 @@ export const setupDatabase = () => {
       scheduled_at INTEGER NOT NULL,
       sent_at INTEGER,
       status TEXT DEFAULT 'scheduled',
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS achievements (
@@ -184,7 +204,7 @@ export const setupDatabase = () => {
   `);
 };
 
-export const clearDatabase = () => {
+export const clearDatabase = async () => {
   const tables = [
     'users',
     'routines',
@@ -203,15 +223,15 @@ export const clearDatabase = () => {
     'sync_state'
   ];
 
-  db.withTransactionSync(() => {
-    db.execSync('PRAGMA foreign_keys = OFF;');
+  await db.withTransactionAsync(async () => {
+    await db.execAsync('PRAGMA foreign_keys = OFF;');
     for (const table of tables) {
       try {
-        db.execSync(`DELETE FROM ${table};`);
+        await db.execAsync(`DELETE FROM ${table};`);
       } catch (e) {
         console.error(`Failed to clear table ${table}:`, e);
       }
     }
-    db.execSync('PRAGMA foreign_keys = ON;');
+    await db.execAsync('PRAGMA foreign_keys = ON;');
   });
 };

@@ -5,8 +5,8 @@ import { getLocalYYYYMMDD } from '../utils/date';
 export const useUser = () => {
   return useQuery({
     queryKey: ['user'],
-    queryFn: () => {
-      const user = db.getFirstSync<any>('SELECT * FROM users LIMIT 1');
+    queryFn: async () => {
+      const user = await db.getFirstAsync<any>('SELECT * FROM users LIMIT 1');
       return user || null;
     },
   });
@@ -15,9 +15,9 @@ export const useUser = () => {
 export const useAllActiveRoutines = (userId?: string) => {
   return useQuery({
     queryKey: ['routines', userId],
-    queryFn: () => {
+    queryFn: async () => {
       if (!userId) return [];
-      return db.getAllSync<any>('SELECT * FROM routines WHERE user_id = ? AND status = "active"', [userId]);
+      return await db.getAllAsync<any>('SELECT * FROM routines WHERE user_id = ? AND status = "active"', [userId]);
     },
     enabled: !!userId,
   });
@@ -26,44 +26,73 @@ export const useAllActiveRoutines = (userId?: string) => {
 export const useRoutine = (routineId?: string) => {
   return useQuery({
     queryKey: ['routine_detail', routineId],
-    queryFn: () => {
+    queryFn: async () => {
       if (!routineId) return null;
-      return db.getFirstSync<any>('SELECT * FROM routines WHERE id = ?', [routineId]) || null;
+      return await db.getFirstAsync<any>('SELECT * FROM routines WHERE id = ?', [routineId]) || null;
     },
     enabled: !!routineId,
   });
 };
 
-export const useAllTasksForToday = (userId?: string) => {
+export const useAgendaTasks = (userId?: string) => {
   return useQuery({
-    queryKey: ['tasks', 'all', 'today', userId],
-    queryFn: () => {
-      if (!userId) return [];
-      const routines = db.getAllSync<any>('SELECT * FROM routines WHERE user_id = ? AND status = "active"', [userId]);
-      const targetDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    queryKey: ['tasks', 'agenda', userId],
+    queryFn: async () => {
+      if (!userId) return {};
+      const routines = await db.getAllAsync<any>('SELECT * FROM routines WHERE user_id = ? AND status = "active"', [userId]);
       
       let allTasks: any[] = [];
       
       for (const r of routines) {
-        let targetWeek = 1;
-        if (r.ai_generated_at) {
-          const startOfRoutineDay = new Date(r.ai_generated_at);
-          startOfRoutineDay.setHours(0, 0, 0, 0);
-          const startOfToday = new Date();
-          startOfToday.setHours(0, 0, 0, 0);
-          const diffDays = Math.round((startOfToday.getTime() - startOfRoutineDay.getTime()) / (1000 * 60 * 60 * 24));
-          targetWeek = Math.floor(diffDays / 7) + 1;
-        }
-        
-        const tasks = db.getAllSync<any>(
-          'SELECT * FROM tasks WHERE routine_id = ? AND target_week = ? AND target_day = ? ORDER BY scheduled_time ASC',
-          [r.id, targetWeek, targetDay]
+        // Query ALL tasks for active routines that are scheduled
+        const tasks = await db.getAllAsync<any>(
+          'SELECT * FROM tasks WHERE routine_id = ? AND scheduled_date IS NOT NULL ORDER BY start_time ASC',
+          [r.id]
         );
         
-        const enrichedTasks = tasks.map(task => {
-          const subtasks = db.getAllSync<any>('SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC', [task.id]);
+        const enrichedTasks = await Promise.all(tasks.map(async (task: any) => {
+          const subtasks = await db.getAllAsync<any>('SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC', [task.id]);
           return { ...task, subtasks, routine_title: r.title, routine_type: r.routine_type };
-        });
+        }));
+        
+        allTasks = [...allTasks, ...enrichedTasks];
+      }
+      
+      // Group by scheduled_date for react-native-calendars Agenda
+      const grouped: Record<string, any[]> = {};
+      allTasks.forEach(task => {
+        const date = task.scheduled_date;
+        if (!grouped[date]) {
+          grouped[date] = [];
+        }
+        grouped[date].push(task);
+      });
+      
+      return grouped;
+    },
+    enabled: !!userId,
+  });
+};
+
+export const useBacklogTasks = (userId?: string) => {
+  return useQuery({
+    queryKey: ['tasks', 'backlog', userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const routines = await db.getAllAsync<any>('SELECT * FROM routines WHERE user_id = ? AND status = "active"', [userId]);
+      
+      let allTasks: any[] = [];
+      
+      for (const r of routines) {
+        const tasks = await db.getAllAsync<any>(
+          'SELECT * FROM tasks WHERE routine_id = ? AND (is_backlog = 1 OR scheduled_date IS NULL)',
+          [r.id]
+        );
+        
+        const enrichedTasks = await Promise.all(tasks.map(async (task: any) => {
+          const subtasks = await db.getAllAsync<any>('SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC', [task.id]);
+          return { ...task, subtasks, routine_title: r.title, routine_type: r.routine_type };
+        }));
         
         allTasks = [...allTasks, ...enrichedTasks];
       }
@@ -77,7 +106,7 @@ export const useAllTasksForToday = (userId?: string) => {
 export const useTasks = (routineId?: string, targetWeek?: number, targetDay?: string) => {
   return useQuery({
     queryKey: ['tasks', routineId, targetWeek, targetDay],
-    queryFn: () => {
+    queryFn: async () => {
       if (!routineId) return [];
       
       let query = 'SELECT * FROM tasks WHERE routine_id = ?';
@@ -93,12 +122,12 @@ export const useTasks = (routineId?: string, targetWeek?: number, targetDay?: st
       }
       
       query += ' ORDER BY scheduled_time ASC';
-      const tasks = db.getAllSync<any>(query, args);
+      const tasks = await db.getAllAsync<any>(query, args);
       
-      const enrichedTasks = tasks.map(task => {
-        const subtasks = db.getAllSync<any>('SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC', [task.id]);
+      const enrichedTasks = await Promise.all(tasks.map(async (task: any) => {
+        const subtasks = await db.getAllAsync<any>('SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC', [task.id]);
         return { ...task, subtasks };
-      });
+      }));
       return enrichedTasks;
     },
     enabled: !!routineId,
@@ -109,10 +138,10 @@ export const useTasks = (routineId?: string, targetWeek?: number, targetDay?: st
 export const useTodayCompletions = (userId?: string) => {
   return useQuery({
     queryKey: ['completions', 'today', userId],
-    queryFn: () => {
+    queryFn: async () => {
       if (!userId) return [];
       const todayDate = getLocalYYYYMMDD();
-      return db.getAllSync<any>('SELECT * FROM task_completions WHERE user_id = ? AND date = ?', [userId, todayDate]);
+      return await db.getAllAsync<any>('SELECT * FROM task_completions WHERE user_id = ? AND date = ?', [userId, todayDate]);
     },
     enabled: !!userId,
   });
@@ -121,9 +150,9 @@ export const useTodayCompletions = (userId?: string) => {
 export const useHabits = (routineId?: string) => {
   return useQuery({
     queryKey: ['habits', routineId],
-    queryFn: () => {
+    queryFn: async () => {
       if (!routineId) return [];
-      return db.getAllSync<any>('SELECT * FROM habits WHERE routine_id = ? ORDER BY title ASC', [routineId]);
+      return await db.getAllAsync<any>('SELECT * FROM habits WHERE routine_id = ? ORDER BY title ASC', [routineId]);
     },
     enabled: !!routineId,
   });
@@ -132,9 +161,9 @@ export const useHabits = (routineId?: string) => {
 export const useRoutineWeeks = (routineId?: string) => {
   return useQuery({
     queryKey: ['routine_weeks', routineId],
-    queryFn: () => {
+    queryFn: async () => {
       if (!routineId) return [];
-      return db.getAllSync<any>('SELECT * FROM routine_weeks WHERE routine_id = ? AND is_completed = 1', [routineId]);
+      return await db.getAllAsync<any>('SELECT * FROM routine_weeks WHERE routine_id = ? AND is_completed = 1', [routineId]);
     },
     enabled: !!routineId,
   });
@@ -143,9 +172,9 @@ export const useRoutineWeeks = (routineId?: string) => {
 export const useWeeklyReport = (userId?: string) => {
   return useQuery({
     queryKey: ['weekly_report', userId],
-    queryFn: () => {
+    queryFn: async () => {
       if (!userId) return null;
-      const row = db.getFirstSync<any>(
+      const row = await db.getFirstAsync<any>(
         'SELECT * FROM weekly_reports WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
         [userId]
       );
@@ -170,11 +199,11 @@ export const useWeeklyReport = (userId?: string) => {
 export const useWeeklyCompletions = (userId?: string) => {
   return useQuery({
     queryKey: ['completions', 'weekly', userId],
-    queryFn: () => {
+    queryFn: async () => {
       if (!userId) return [];
       // We want to fetch completions from the last 7 days
       // For MVP we just fetch all and filter/aggregate in JS, since SQLite dates might be tricky.
-      const allCompletions = db.getAllSync<any>(
+      const allCompletions = await db.getAllAsync<any>(
         'SELECT * FROM task_completions WHERE user_id = ? AND state = "completed"',
         [userId]
       );

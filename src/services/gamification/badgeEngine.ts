@@ -6,15 +6,15 @@ import uuid from 'react-native-uuid';
 /**
  * Reads current badge stats for a user from SQLite.
  */
-export const getBadgeStats = (userId: string): BadgeStats => {
-  const totalCompletedRow = db.getFirstSync<any>(
+export const getBadgeStats = async (userId: string): Promise<BadgeStats> => {
+  const totalCompletedRow = await db.getFirstAsync<any>(
     "SELECT COUNT(*) as count FROM task_completions WHERE user_id = ? AND state = 'completed'",
     [userId]
   );
   const totalCompleted = totalCompletedRow?.count || 0;
 
   // Count recovery completions
-  const recoveryRow = db.getFirstSync<any>(
+  const recoveryRow = await db.getFirstAsync<any>(
     `SELECT COUNT(tc.id) as count FROM task_completions tc
      JOIN tasks t ON tc.task_id = t.id
      WHERE tc.user_id = ? AND tc.state = 'completed' AND t.is_recovery_task = 1`,
@@ -24,7 +24,7 @@ export const getBadgeStats = (userId: string): BadgeStats => {
 
   // Count perfect days (days where all tasks were completed)
   // Simplified: days with at least 1 completed and 0 skipped
-  const dayStats = db.getAllSync<any>(
+  const dayStats = await db.getAllAsync<any>(
     `SELECT date,
        SUM(CASE WHEN state = 'completed' THEN 1 ELSE 0 END) as done,
        SUM(CASE WHEN state = 'skipped'   THEN 1 ELSE 0 END) as missed
@@ -34,7 +34,7 @@ export const getBadgeStats = (userId: string): BadgeStats => {
   const perfectDays = dayStats.filter((d) => d.done > 0 && d.missed === 0).length;
 
   // Current streak (re-uses streakCalculator logic inline for simplicity)
-  const dates = db.getAllSync<any>(
+  const dates = await db.getAllAsync<any>(
     `SELECT DISTINCT date FROM task_completions WHERE user_id = ? AND state = 'completed' ORDER BY date DESC`,
     [userId]
   );
@@ -50,7 +50,7 @@ export const getBadgeStats = (userId: string): BadgeStats => {
   }
 
   // Total XP from completions
-  const xpRow = db.getFirstSync<any>(
+  const xpRow = await db.getFirstAsync<any>(
     'SELECT SUM(xp_awarded) as total FROM task_completions WHERE user_id = ?',
     [userId]
   );
@@ -70,23 +70,46 @@ export const getBadgeStats = (userId: string): BadgeStats => {
  * Checks all badge definitions against current stats.
  * Inserts any newly earned badges and returns their names.
  */
-export const checkAndAwardBadges = (userId: string): string[] => {
-  const stats = getBadgeStats(userId);
-  const existing = db.getAllSync<any>(
+export const checkAndAwardBadges = async (userId: string): Promise<string[]> => {
+  const res = await db.getAllAsync<any>(
     'SELECT badge_name FROM achievements WHERE user_id = ?',
     [userId]
-  ).map((r) => r.badge_name);
-
+  );
+  const existing = res.map((r: any) => r.badge_name);
   const newlyUnlocked: string[] = [];
+
+  // Call getBadgeStats ONCE to avoid N+1 query bottleneck
+  const stats = await getBadgeStats(userId);
 
   for (const badge of BADGE_DEFINITIONS) {
     if (existing.includes(badge.id)) continue;
+    
     if (badge.check(stats)) {
-      db.runSync(
+      const achievementId = uuid.v4() as string;
+      const achievedAt = Date.now();
+      
+      await db.runAsync(
         `INSERT INTO achievements (id, user_id, badge_name, achieved_at, xp_awarded)
          VALUES (?, ?, ?, ?, ?)`,
-        [uuid.v4() as string, userId, badge.id, Date.now(), badge.xpReward]
+        [achievementId, userId, badge.id, achievedAt, badge.xpReward]
       );
+      
+      // Queue achievement for cloud sync
+      const payload = {
+        id: achievementId,
+        user_id: userId,
+        badge_name: badge.id,
+        achieved_at: achievedAt,
+        xp_awarded: badge.xpReward
+      };
+      
+      try {
+        const { queueOperation } = require('../sync/syncEngine');
+        await queueOperation('achievements', 'INSERT', payload);
+      } catch (err) {
+        console.error('Failed to queue achievement sync', err);
+      }
+      
       newlyUnlocked.push(badge.name);
     }
   }
@@ -97,8 +120,8 @@ export const checkAndAwardBadges = (userId: string): string[] => {
 /**
  * Returns all earned achievement records for a user.
  */
-export const getAchievements = (userId: string) => {
-  return db.getAllSync<any>(
+export const getAchievements = async (userId: string) => {
+  const res = await db.getAllAsync<any>(
     'SELECT * FROM achievements WHERE user_id = ? ORDER BY achieved_at DESC',
     [userId]
   );

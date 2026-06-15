@@ -70,8 +70,8 @@ export const cancelAllNotifications = async () => {
 
 // ─── Schedule today's daily batch ────────────────────────────────────────────
 
-const getTodaysPendingTasks = (userId: string) => {
-  const routines = db.getAllSync<any>('SELECT * FROM routines WHERE user_id = ? AND status = "active"', [userId]);
+const getTodaysPendingTasks = async (userId: string) => {
+  const routines = await db.getAllAsync<any>('SELECT * FROM routines WHERE user_id = ? AND status = "active"', [userId]);
   const targetDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
   let allTasks: any[] = [];
@@ -87,7 +87,7 @@ const getTodaysPendingTasks = (userId: string) => {
       targetWeek = Math.floor(diffDays / 7) + 1;
     }
 
-    const tasks = db.getAllSync<any>(
+    const tasks = await db.getAllAsync<any>(
       'SELECT * FROM tasks WHERE routine_id = ? AND target_week = ? AND target_day = ? AND status != "completed" AND status != "skipped" ORDER BY scheduled_time ASC',
       [r.id, targetWeek, targetDay]
     );
@@ -143,7 +143,7 @@ export const scheduleDailyNotifications = async (opts: ScheduleOptions) => {
   };
 
   // Fetch today's tasks
-  const pendingTasks = getTodaysPendingTasks(opts.userId);
+  const pendingTasks = await getTodaysPendingTasks(opts.userId);
   const floatingTasks = pendingTasks.filter((t: any) => !t.scheduled_time);
 
   // 1. Morning — at wake time
@@ -229,14 +229,14 @@ export const scheduleTaskReminder = async (
 };
 
 // ─── Log notification to SQLite ───────────────────────────────────────────────
-const logNotification = (
+const logNotification = async (
   userId: string,
   type: string,
   message: string,
   scheduledAt: number
 ) => {
   try {
-    db.runSync(
+    await db.runAsync(
       `INSERT INTO notifications (id, user_id, type, message, scheduled_at, status, created_at)
        VALUES (?, ?, ?, ?, ?, 'scheduled', ?)`,
       [uuid.v4() as string, userId, type, message, scheduledAt, Date.now()]

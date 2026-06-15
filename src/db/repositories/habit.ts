@@ -13,8 +13,8 @@ export interface HabitItem {
 }
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
-export const getHabitsForRoutine = (routineId: string): HabitItem[] => {
-  return db.getAllSync<HabitItem>(
+export const getHabitsForRoutine = async (routineId: string): Promise<HabitItem[]> => {
+  return await db.getAllAsync<HabitItem>(
     'SELECT * FROM habits WHERE routine_id = ? ORDER BY title ASC',
     [routineId]
   );
@@ -26,8 +26,8 @@ export const getHabitsForRoutine = (routineId: string): HabitItem[] => {
  * Updates streak_count, longest_streak, completion_count, last_completed_at.
  * Streak is consecutive calendar days.
  */
-export const completeHabit = (habitId: string) => {
-  const habit = db.getFirstSync<HabitItem>('SELECT * FROM habits WHERE id = ?', [habitId]);
+export const completeHabit = async (habitId: string) => {
+  const habit = await db.getFirstAsync<HabitItem>('SELECT * FROM habits WHERE id = ?', [habitId]);
   if (!habit) return;
 
   const now = Date.now();
@@ -52,7 +52,7 @@ export const completeHabit = (habitId: string) => {
 
   const newLongest = Math.max(newStreak, habit.longest_streak);
 
-  db.runSync(
+  await db.runAsync(
     `UPDATE habits
      SET streak_count = ?, longest_streak = ?, completion_count = completion_count + 1, last_completed_at = ?, updated_at = ?
      WHERE id = ?`,
@@ -71,16 +71,16 @@ export const isHabitCompletedToday = (habit: HabitItem): boolean => {
 };
 
 // ─── Seed default habits from AI routine ─────────────────────────────────────
-export const saveHabitsForRoutine = (
+export const saveHabitsForRoutine = async (
   routineId: string,
   habits: Array<{ title: string; recurrence_rule: string }>
 ) => {
   const now = Date.now();
-  habits.forEach((h) => {
-    db.runSync(
+  for (const h of habits) {
+    await db.runAsync(
       `INSERT OR IGNORE INTO habits (id, routine_id, title, recurrence_rule, streak_count, longest_streak, completion_count, created_at, updated_at)
        VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?)`,
       [uuid.v4() as string, routineId, h.title, h.recurrence_rule, now, now]
     );
-  });
+  }
 };

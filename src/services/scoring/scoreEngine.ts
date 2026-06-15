@@ -10,8 +10,9 @@ import { db } from '../../db/db';
  *   (habit_completed / habit_total)       * 0.10
  * ) * 100
  */
-export const calculateDailyScore = (routineId: string): number => {
-  const tasks = db.getAllSync<any>('SELECT * FROM tasks WHERE routine_id = ?', [routineId]);
+export const calculateDailyScore = async (routineId: string): Promise<number> => {
+  // Only calculate score based on gamified tasks (TRD strict enforcement)
+  const tasks = await db.getAllAsync<any>('SELECT * FROM tasks WHERE routine_id = ? AND is_gamified = 1', [routineId]);
 
   const weightConfig: Record<string, number> = {
     critical: 0.40,
@@ -44,12 +45,14 @@ export const calculateDailyScore = (routineId: string): number => {
 /**
  * PromiseKeptRate = tasks_completed / (tasks_completed + tasks_skipped) * 100
  */
-export const calculatePromiseKeptRate = (userId: string): number => {
-  const row = db.getFirstSync<any>(
+export const calculatePromiseKeptRate = async (userId: string): Promise<number> => {
+  const row = await db.getFirstAsync<any>(
     `SELECT
-       SUM(CASE WHEN state = 'completed' THEN 1 ELSE 0 END) as completed,
-       SUM(CASE WHEN state = 'skipped' THEN 1 ELSE 0 END)   as skipped
-     FROM task_completions WHERE user_id = ?`,
+       SUM(CASE WHEN tc.state = 'completed' THEN 1 ELSE 0 END) as completed,
+       SUM(CASE WHEN tc.state = 'skipped' THEN 1 ELSE 0 END)   as skipped
+     FROM task_completions tc
+     JOIN tasks t ON tc.task_id = t.id
+     WHERE tc.user_id = ? AND t.is_gamified = 1`,
     [userId]
   );
   if (!row) return 0;

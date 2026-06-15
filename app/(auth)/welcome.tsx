@@ -48,7 +48,7 @@ export default function WelcomeScreen() {
           clearDatabase();
           await runFullSync();
 
-          const user = db.getFirstSync('SELECT id FROM users LIMIT 1');
+          const user = await db.getFirstAsync('SELECT id FROM users LIMIT 1');
           console.log(`[Welcome] First local user after sync:`, user);
           if (!user) {
             router.replace('/(auth)/onboarding');

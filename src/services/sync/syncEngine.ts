@@ -10,7 +10,11 @@ export const SYNCABLE_TABLES = [
   'tasks',
   'subtasks',
   'recovery_tasks',
-  'task_completions'
+  'task_completions',
+  'achievements',
+  'weekly_reports',
+  'notifications',
+  'analytics_events'
 ];
 
 type OperationType = 'INSERT' | 'UPDATE' | 'DELETE';
@@ -25,7 +29,7 @@ export async function queueOperation(tableName: string, operation: OperationType
     const now = Date.now();
     
     // Store in local sync queue
-    db.runSync(
+    await db.runAsync(
       `INSERT INTO sync_queue (id, table_name, operation, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
       [id, tableName, operation, JSON.stringify(payload), now]
     );
@@ -42,81 +46,155 @@ export async function queueOperation(tableName: string, operation: OperationType
 }
 
 /**
- * Pushes all pending queued operations to Supabase in order.
+ * Pushes all pending queued operations to Supabase using Batched Upserts.
+ * Solves N+1 execution by grouping requests by table.
  */
 export async function pushSync() {
-  const queue = db.getAllSync<{id: string, table_name: string, operation: string, payload: string}>(
+  const queue = await db.getAllAsync<{id: string, table_name: string, operation: string, payload: string}>(
     'SELECT * FROM sync_queue ORDER BY created_at ASC'
   );
   
   if (queue.length === 0) return;
 
+  const tableGroups: Record<string, { upserts: Record<string, any>; deletes: Set<string>; queueItemIds: string[]; }> = {};
+
   for (const item of queue) {
     const payload = JSON.parse(item.payload);
-    let success = false;
+    if (!tableGroups[item.table_name]) {
+      tableGroups[item.table_name] = { upserts: {}, deletes: new Set(), queueItemIds: [] };
+    }
+    tableGroups[item.table_name].queueItemIds.push(item.id);
 
+    if (item.operation === 'DELETE') {
+      tableGroups[item.table_name].deletes.add(payload.id);
+      delete tableGroups[item.table_name].upserts[payload.id];
+    } else {
+      // Both INSERT and UPDATE map to a Supabase .upsert()
+      tableGroups[item.table_name].upserts[payload.id] = payload;
+      tableGroups[item.table_name].deletes.delete(payload.id);
+    }
+  }
+
+  for (const [tableName, group] of Object.entries(tableGroups)) {
     try {
-      if (item.operation === 'INSERT') {
-        const { error } = await supabase.from(item.table_name).insert(payload);
-        if (!error || error.code === '23505') {
-          success = true; // 23505 = unique constraint violation (already exists)
-        } else if (error.code === '42501' || error.message?.includes('row-level security')) {
-          console.error(`🚨 [RLS BLOCK] Supabase blocked INSERT on ${item.table_name}. Check Row Level Security policies! Error:`, error);
-        } else {
-          console.error(`Push Insert Error (${item.table_name}):`, error);
+      const upsertPayloads = Object.values(group.upserts);
+      const deleteIds = Array.from(group.deletes);
+      let success = true;
+
+      // 1. Batched Upsert
+      if (upsertPayloads.length > 0) {
+        // [CONFLICT RESOLUTION] Timestamp Vector Check
+        let finalUpserts = upsertPayloads;
+        
+        try {
+          const payloadIds = upsertPayloads.map(p => p.id);
+          const { data: remoteRecords, error: remoteErr } = await supabase
+            .from(tableName)
+            .select('id, updated_at')
+            .in('id', payloadIds);
+
+          if (!remoteErr && remoteRecords) {
+            const remoteMap = new Map(remoteRecords.map(r => [r.id, r.updated_at]));
+            
+            finalUpserts = upsertPayloads.filter(local => {
+              const remoteUpdatedAt = remoteMap.get(local.id);
+              // If remote doesn't exist, this is an INSERT. Keep it.
+              if (!remoteUpdatedAt) return true;
+              
+              // If table lacks updated_at, fallback to last-synced-wins
+              if (!local.updated_at) return true;
+
+              // Only keep local if it is strictly newer than the server
+              return local.updated_at > remoteUpdatedAt;
+            });
+            
+            const discarded = upsertPayloads.length - finalUpserts.length;
+            if (discarded > 0) {
+               console.log(`[SyncEngine] Conflict Resolution: Discarded ${discarded} stale local edits for ${tableName}`);
+            }
+          }
+        } catch (e) {
+          console.warn(`[SyncEngine] Conflict resolution check failed for ${tableName}`, e);
         }
-        console.log(`[SyncEngine] Push Insert ${item.table_name}: success=${success}`, payload);
-      } 
-      else if (item.operation === 'UPDATE') {
-        const { error } = await supabase.from(item.table_name).update(payload).eq('id', payload.id);
-        if (!error) {
-          success = true;
-        } else if (error.code === '42501' || error.message?.includes('row-level security')) {
-          console.error(`🚨 [RLS BLOCK] Supabase blocked UPDATE on ${item.table_name}. Check Row Level Security policies! Error:`, error);
-        } else {
-          console.error(`Push Update Error (${item.table_name}):`, error);
-        }
-        console.log(`[SyncEngine] Push Update ${item.table_name}: success=${success}`, payload);
-      } 
-      else if (item.operation === 'DELETE') {
-        const { error } = await supabase.from(item.table_name).delete().eq('id', payload.id);
-        if (!error) {
-          success = true;
-        } else if (error.code === '42501' || error.message?.includes('row-level security')) {
-          console.error(`🚨 [RLS BLOCK] Supabase blocked DELETE on ${item.table_name}. Check Row Level Security policies! Error:`, error);
-        } else {
-          console.error(`Push Delete Error (${item.table_name}):`, error);
+
+        if (finalUpserts.length > 0) {
+          const { error } = await supabase.from(tableName).upsert(finalUpserts);
+          if (error) {
+             console.error(`🚨 [SyncEngine] Push Upsert Error (${tableName}):`, error);
+             success = false;
+          } else {
+             console.log(`[SyncEngine] Upserted ${finalUpserts.length} records to ${tableName}`);
+          }
         }
       }
 
-      // If successful (or safely ignorable like a duplicate insert), remove from local queue
+      // 2. Batched Delete
+      if (deleteIds.length > 0) {
+        const { error } = await supabase.from(tableName).delete().in('id', deleteIds);
+        if (error) {
+           console.error(`🚨 [SyncEngine] Push Delete Error (${tableName}):`, error);
+           success = false;
+        } else {
+           console.log(`[SyncEngine] Deleted ${deleteIds.length} records from ${tableName}`);
+        }
+      }
+
+      // 3. Clear Processed Items from Local Queue
       if (success) {
-        db.runSync('DELETE FROM sync_queue WHERE id = ?', [item.id]);
+        await db.withTransactionAsync(async () => {
+           for (const qid of group.queueItemIds) {
+             await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [qid]);
+           }
+        });
       }
     } catch (err) {
-      console.error(`Sync exception on ${item.table_name} ${item.operation}:`, err);
+       console.error(`Sync exception on ${tableName}:`, err);
     }
   }
 }
 
 /**
  * Pulls all updates from Supabase since the last successful pull, 
- * applying them locally using Last-Write-Wins (INSERT OR REPLACE).
+ * applying them locally using Last-Write-Wins (Timestamp Conflict Resolution).
  */
 export async function pullSync() {
   // Get last synced timestamp
   let lastSynced = 0;
-  const state = db.getFirstSync<{last_synced_at: number}>('SELECT last_synced_at FROM sync_state LIMIT 1');
+  const state = await db.getFirstAsync<{last_synced_at: number}>('SELECT last_synced_at FROM sync_state LIMIT 1');
   if (state) {
     lastSynced = state.last_synced_at;
   }
 
   const now = Date.now();
 
+  // 1. Pull Tombstones (Ghost Record Cleanup)
+  try {
+    const { data: tombstones, error: tErr } = await supabase
+      .from('sync_tombstones')
+      .select('record_id, table_name, deleted_at')
+      .gt('deleted_at', lastSynced);
+
+    if (tErr) {
+      console.error(`🚨 [SyncEngine] Tombstone pull failed:`, tErr);
+    } else if (tombstones && tombstones.length > 0) {
+      console.log(`[SyncEngine] Processing ${tombstones.length} tombstones (Hard Deletes)`);
+      await db.withTransactionAsync(async () => {
+        for (const tb of tombstones) {
+          if (SYNCABLE_TABLES.includes(tb.table_name)) {
+            await db.runAsync(`DELETE FROM ${tb.table_name} WHERE id = ?`, [tb.record_id]);
+          }
+        }
+      });
+    }
+  } catch (err) {
+    console.error(`[SyncEngine] Tombstone processing exception:`, err);
+  }
+
+  // 2. Pull Updates
   for (const table of SYNCABLE_TABLES) {
     try {
-      // Some tables like subtasks might only have created_at
-      const timestampCol = ['subtasks', 'task_completions', 'achievements'].includes(table) ? 'created_at' : 'updated_at';
+      // Use created_at if updated_at is missing on specific tables
+      const timestampCol = ['task_completions', 'achievements', 'weekly_reports', 'analytics_events'].includes(table) ? 'created_at' : 'updated_at';
       
       const { data, error } = await supabase
         .from(table)
@@ -138,28 +216,41 @@ export async function pullSync() {
         const columns = Object.keys(sample).join(', ');
         const placeholders = Object.keys(sample).map(() => '?').join(', ');
 
-        db.withTransactionSync(() => {
-          for (const row of data) {
-            const values = Object.values(row);
-            // Replace handles conflict by overwriting with the newer cloud data
-            db.runSync(
-              `INSERT OR REPLACE INTO ${table} (${columns}) VALUES (${placeholders})`,
-              values as any[]
+        await db.withTransactionAsync(async () => {
+          for (const cloudRow of data) {
+            // Conflict Resolution Check
+            const localRow = await db.getFirstAsync<any>(
+              `SELECT ${timestampCol} FROM ${table} WHERE id = ?`,
+              [cloudRow.id]
             );
+
+            const cloudTime = cloudRow[timestampCol] ? Number(cloudRow[timestampCol]) : 0;
+            const localTime = localRow && localRow[timestampCol] ? Number(localRow[timestampCol]) : 0;
+
+            // Apply update only if cloud version is newer or local record doesn't exist
+            if (!localRow || cloudTime >= localTime) {
+              const values = Object.values(cloudRow);
+              await db.runAsync(
+                `INSERT OR REPLACE INTO ${table} (${columns}) VALUES (${placeholders})`,
+                values as any[]
+              );
+            } else {
+               console.log(`[SyncEngine] Conflict resolved locally for ${table} [${cloudRow.id}]: Local (${localTime}) > Cloud (${cloudTime})`);
+            }
           }
         });
       }
-    } catch (err) {
-      console.error(`Pull sync crash for ${table}:`, err);
+    } catch (error) {
+      console.error(`Error pulling ${table}:`, error);
     }
   }
 
   // Update sync state
-  if (state) {
-    db.runSync('UPDATE sync_state SET last_synced_at = ?', [now]);
-  } else {
-    db.runSync('INSERT INTO sync_state (id, last_synced_at) VALUES (?, ?)', [uuid.v4() as string, now]);
-  }
+  await db.runAsync(
+    'INSERT OR REPLACE INTO sync_state (id, last_synced_at) VALUES (1, ?)',
+    [now]
+  );
+  console.log(`[SyncEngine] pullSync complete. last_synced_at updated to ${now}`);
 }
 
 let isSyncing = false;

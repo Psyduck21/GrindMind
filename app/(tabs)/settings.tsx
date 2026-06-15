@@ -23,22 +23,27 @@ export default function ProfileScreen() {
   const { data: weeklyCompletions } = useWeeklyCompletions(user?.id);
   const { showAlert } = useAlert();
 
-  const stats = useMemo(() => {
-    if (!user?.id) return null;
-    const xp = getTotalXp(user.id);
-    const streak = calculateStreak(user.id);
-    const promiseKept = calculatePromiseKeptRate(user.id);
-    const { current, next, progress } = getLevelInfo(xp);
-    const achievements = getAchievements(user.id);
+  const [stats, setStats] = React.useState<any>(null);
 
-    const completions = db.getAllSync<any>(
-      'SELECT * FROM task_completions WHERE user_id = ?',
-      [user.id]
-    );
-    const totalCompleted = completions.filter((c) => c.state === 'completed').length;
-    const totalSkipped = completions.filter((c) => c.state === 'skipped').length;
+  React.useEffect(() => {
+    const fetchStats = async () => {
+      if (!user?.id) return;
+      const xp = await getTotalXp(user.id);
+      const streak = await calculateStreak(user.id);
+      const promiseKept = await calculatePromiseKeptRate(user.id);
+      const { current, next, progress } = getLevelInfo(xp);
+      const achievements = await getAchievements(user.id);
 
-    return { xp, streak, promiseKept, current, next, progress, achievements, totalCompleted, totalSkipped };
+      const completions = await db.getAllAsync<any>(
+        'SELECT * FROM task_completions WHERE user_id = ?',
+        [user.id]
+      );
+      const totalCompleted = completions.filter((c: any) => c.state === 'completed').length;
+      const totalSkipped = completions.filter((c: any) => c.state === 'skipped').length;
+
+      setStats({ xp, streak, promiseKept, current, next, progress, achievements, totalCompleted, totalSkipped });
+    };
+    fetchStats();
   }, [user?.id]);
 
   const handleSignOut = async () => {

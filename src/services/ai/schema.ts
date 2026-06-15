@@ -28,5 +28,22 @@ export const GeneratedRoutineSchema = z.object({
   tasks: z.array(TaskSchema).min(1),
 });
 
+export const IntentActionSchema = z.object({
+  action: z.enum(['MOVE', 'CANCEL', 'UPDATE', 'CREATE']),
+  task_id: z.string().optional(), // Required for MOVE, CANCEL, UPDATE
+  new_scheduled_date: z.string().optional(), // For MOVE/CREATE
+  new_scheduled_time: z.string().optional(), // For MOVE/CREATE
+  new_duration_minutes: z.number().optional(), // For UPDATE/CREATE
+  new_title: z.string().optional(), // For CREATE/UPDATE
+  new_priority: z.enum(['high', 'medium', 'low']).optional()
+});
+
+export const IntentGraphSchema = z.object({
+  intents: z.array(IntentActionSchema),
+  message_to_user: z.string()
+});
+
 export type GeneratedRoutine = z.infer<typeof GeneratedRoutineSchema>;
 export type GeneratedTask = z.infer<typeof TaskSchema>;
+export type IntentAction = z.infer<typeof IntentActionSchema>;
+export type IntentGraph = z.infer<typeof IntentGraphSchema>;
